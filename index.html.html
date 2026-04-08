@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Synapse CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend+Giga:wght@400;500;600;700&family=Libre+Franklin:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060C18;
+  --surface:#080F1E;
+  --card:#0C1628;
+  --card2:#0F1D33;
+  --border:#142540;
+  --border2:#1A3260;
+  --purple:#024AA5;
+  --purple-light:#82CCFA;
+  --purple-dim:#073C81;
+  --purple-bg:#0A1E3D;
+  --text:#EFF6FF;
+  --text2:#A0BEDD;
+  --text3:#3E6080;
+  --grey:#6B7280;
+  --yellow:#F59E0B;
+  --yellow-bg:#1A1400;
+  --blue:#2D7DD2;
+  --blue-bg:#071628;
+  --green:#10B981;
+  --green-bg:#041A10;
+  --red:#EF4444;
+  --red-bg:#1A0606;
+  --radius:10px;
+  --radius-lg:14px;
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Libre Franklin',sans-serif;background:var(--bg);color:var(--text);display:flex}
+body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(2,74,165,0.12) 0%,transparent 70%);pointer-events:none;z-index:0}
+
+/* ── Sidebar ────────────────────────────────── */
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:0}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,#0A1E3D 0%,#080F1E 100%);position:relative;overflow:hidden}
+.sb-logo::before{content:'';position:absolute;top:-20px;left:-20px;width:80px;height:80px;background:radial-gradient(circle,rgba(2,74,165,0.4) 0%,transparent 70%);pointer-events:none}
+.sb-logo-inner{display:flex;align-items:center;gap:10px}
+.sb-mark{width:36px;height:36px;background:var(--purple);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-name{font-family:'Lexend Giga',sans-serif;font-size:13px;font-weight:700;color:var(--text);letter-spacing:2px;text-transform:uppercase}
+.sb-sub{font-size:9px;color:var(--purple-light);margin-top:2px;letter-spacing:1.5px;text-transform:uppercase;font-weight:500}
+.sb-nav{flex:1;padding:12px 10px;overflow-y:auto}
+.sb-section{font-family:'Lexend Giga',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:8px 8px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;color:var(--text2);transition:all .15s;margin-bottom:2px;border:1px solid transparent}
+.nav-item:hover{background:var(--card);color:var(--text)}
+.nav-item.active{background:var(--purple-bg);color:var(--purple-light);border-color:var(--purple-dim)}
+.nav-item .icon{font-size:15px;flex-shrink:0;width:18px;text-align:center}
+.nav-badge{margin-left:auto;background:var(--purple-dim);color:var(--purple-light);font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px}
+.sb-bottom{padding:12px 10px;border-top:1px solid var(--border)}
+.btn-add{width:100%;padding:10px;background:var(--purple);color:#fff;border:none;border-radius:var(--radius);font-family:'Lexend Giga',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:background .15s;letter-spacing:1px;text-transform:uppercase}
+.btn-add:hover{background:#0358C4}
+.sb-user{display:flex;align-items:center;gap:8px;padding:10px 10px 4px}
+.sb-avatar{width:28px;height:28px;border-radius:50%;background:var(--purple-dim);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--purple-light);flex-shrink:0}
+.sb-uname{font-size:12px;font-weight:500;color:var(--text2)}
+.sb-role{font-size:10px;color:var(--text3)}
+
+/* ── Main ───────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0;background:var(--surface)}
+.page-title{font-family:'Lexend Giga',sans-serif;font-size:15px;font-weight:700;color:var(--text);letter-spacing:1px;text-transform:uppercase}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.search-wrap{position:relative}
+.search-wrap input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:7px 12px 7px 32px;font-size:13px;color:var(--text);font-family:'Libre Franklin',sans-serif;width:200px}
+.search-wrap input::placeholder{color:var(--text3)}
+.search-wrap input:focus{outline:none;border-color:var(--purple)}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px}
+.filter-btn{padding:7px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .15s}
+.filter-btn.active{background:var(--purple-bg);border-color:var(--purple-dim);color:var(--purple-light)}
+.filter-btn:hover{border-color:var(--border2)}
+
+.content{flex:1;overflow:hidden;display:flex}
+.view{flex:1;overflow-y:auto;padding:24px}
+
+/* ── Dashboard ──────────────────────────────── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px}
+.stat-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;font-family:'Lexend Giga',sans-serif}
+.stat-val{font-family:'Lexend Giga',sans-serif;font-size:28px;font-weight:700;color:var(--text);line-height:1}
+.stat-sub{font-size:12px;color:var(--text3);margin-top:6px}
+.stat-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.dash-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
+.dash-card-title{font-family:'Lexend Giga',sans-serif;font-size:11px;font-weight:600;color:var(--text);margin-bottom:16px;letter-spacing:1px;text-transform:uppercase}
+.funnel-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.funnel-label{font-size:12px;color:var(--text2);width:120px;flex-shrink:0}
+.funnel-bar-wrap{flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden}
+.funnel-bar{height:8px;border-radius:4px;transition:width .5s ease}
+.funnel-count{font-size:12px;font-weight:600;color:var(--text);width:24px;text-align:right;flex-shrink:0}
+.industry-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.industry-row:last-child{border-bottom:none}
+.ind-name{font-size:13px;color:var(--text2)}
+.ind-count{font-size:13px;font-weight:600;color:var(--text)}
+.ind-pill{padding:2px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.upcoming-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.upcoming-item:last-child{border-bottom:none}
+.upcoming-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.upcoming-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px}
+.upcoming-action{font-size:12px;color:var(--text3)}
+
+/* ── Pipeline Kanban ────────────────────────── */
+.kanban{display:flex;gap:14px;overflow-x:auto;height:100%;padding-bottom:16px}
+.kanban-col{flex-shrink:0;width:260px;display:flex;flex-direction:column}
+.kanban-header{padding:10px 12px;border-radius:10px 10px 0 0;border:1px solid var(--border);border-bottom:none;display:flex;align-items:center;justify-content:space-between}
+.kanban-title{font-size:10px;font-weight:700;letter-spacing:1px;font-family:'Lexend Giga',sans-serif}
+.kanban-count{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px}
+.kanban-cards{flex:1;overflow-y:auto;border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:8px;background:var(--card);display:flex;flex-direction:column;gap:8px;min-height:200px}
+.k-card{background:var(--card2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;cursor:pointer;transition:all .15s}
+.k-card:hover{border-color:var(--purple-dim);background:var(--purple-bg)}
+.k-card-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
+.k-card-cat{font-size:11px;color:var(--text3);margin-bottom:8px}
+.k-card-owner{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:4px}
+.k-card-action{font-size:11px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);display:flex;align-items:center;gap:4px}
+.k-card-phone{font-size:11px;color:var(--purple-light);margin-top:4px}
+
+/* ── Prospects List ─────────────────────────── */
+.prospect-table{width:100%;border-collapse:collapse}
+.prospect-table th{font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--text3);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.prospect-table td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.prospect-table tr:hover td{background:var(--card)}
+.prospect-table tr{cursor:pointer}
+.p-name{font-weight:500;color:var(--text)}
+.p-owner{color:var(--text3);font-size:12px;margin-top:2px}
+
+/* ── Status pills ───────────────────────────── */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.pill-grey{background:rgba(107,114,128,.2);color:#9CA3AF}
+.pill-yellow{background:rgba(245,158,11,.15);color:#F59E0B}
+.pill-blue{background:rgba(59,130,246,.15);color:#60A5FA}
+.pill-green{background:rgba(16,185,129,.15);color:#34D399}
+.pill-red{background:rgba(239,68,68,.15);color:#F87171}
+.pill-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+/* ── Detail Panel ───────────────────────────── */
+.detail-panel{width:380px;flex-shrink:0;border-left:1px solid var(--border);background:var(--surface);overflow-y:auto;display:none;flex-direction:column}
+.detail-panel.open{display:flex}
+.dp-header{padding:20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1}
+.dp-close{float:right;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:0;line-height:1}
+.dp-close:hover{color:var(--text)}
+.dp-name{font-family:'Lexend Giga',sans-serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;padding-right:24px;letter-spacing:0.3px}
+.dp-cat{font-size:12px;color:var(--text3)}
+.dp-body{padding:20px;flex:1}
+.dp-section{margin-bottom:20px}
+.dp-section-title{font-family:'Lexend Giga',sans-serif;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.dp-field{display:flex;gap:8px;margin-bottom:8px}
+.dp-field-label{font-size:12px;color:var(--text3);min-width:90px;flex-shrink:0;padding-top:1px}
+.dp-field-val{font-size:13px;color:var(--text2);line-height:1.5}
+.dp-opp{background:var(--purple-bg);border:1px solid var(--purple-dim);border-radius:8px;padding:12px;font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px}
+.dp-action-box{background:var(--yellow-bg);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px;font-size:13px;color:#FCD34D;line-height:1.6}
+.stage-selector{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.stage-opt{padding:8px;border-radius:8px;border:1px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.stage-opt:hover{transform:scale(1.02)}
+.stage-opt.sel{border-width:2px}
+.activity-item{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.activity-item:last-child{border-bottom:none}
+.act-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:var(--card2)}
+.act-body{flex:1}
+.act-text{font-size:13px;color:var(--text2);line-height:1.5}
+.act-date{font-size:11px;color:var(--text3);margin-top:2px}
+.add-note-wrap{display:flex;gap:8px;margin-top:12px}
+.add-note-wrap textarea{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:'Libre Franklin',sans-serif;resize:none;height:60px}
+.add-note-wrap textarea:focus{outline:none;border-color:var(--purple)}
+.btn-note{padding:8px 14px;background:var(--purple);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;align-self:flex-end}
+.dp-edit-btn{width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .15s;margin-top:4px}
+.dp-edit-btn:hover{border-color:var(--purple-dim);color:var(--text)}
+.dp-del-btn{width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-weight:500;color:var(--red);cursor:pointer;transition:all .15s;margin-top:6px}
+.dp-del-btn:hover{background:var(--red-bg);border-color:var(--red)}
+
+/* ── Modal ──────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--border2);border-radius:18px;padding:28px;width:600px;max-height:90vh;overflow-y:auto}
+.modal-title{font-family:'Lexend Giga',sans-serif;font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;letter-spacing:0.5px}
+.modal-sub{font-size:13px;color:var(--text3);margin-bottom:24px}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.modal-field{display:flex;flex-direction:column;gap:5px}
+.modal-field.full{grid-column:1/-1}
+.modal-field label{font-size:12px;font-weight:500;color:var(--text3)}
+.modal-field input,.modal-field select,.modal-field textarea{padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:14px;color:var(--text);font-family:'Libre Franklin',sans-serif;transition:border-color .15s}
+.modal-field input:focus,.modal-field select:focus,.modal-field textarea:focus{outline:none;border-color:var(--purple)}
+.modal-field select{appearance:none;cursor:pointer}
+.modal-field textarea{min-height:70px;resize:vertical}
+.modal-stage-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:4px}
+.modal-stage-btn{padding:8px 4px;border-radius:8px;border:2px solid transparent;font-size:10px;font-weight:600;cursor:pointer;text-align:center;line-height:1.3;transition:all .1s}
+.modal-stage-btn.sel{border-color:#fff;box-shadow:0 0 0 1px #fff}
+.modal-actions{display:flex;gap:10px;margin-top:20px}
+.btn-primary{flex:1;padding:12px;background:var(--purple);color:#fff;border:none;border-radius:var(--radius);font-family:'Lexend Giga',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:background .15s;letter-spacing:1px;text-transform:uppercase}
+.btn-primary:hover{background:#0358C4}
+.btn-secondary{padding:12px 20px;background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);font-size:14px;cursor:pointer;transition:all .15s}
+.btn-secondary:hover{border-color:var(--border2);color:var(--text)}
+
+/* ── Toast ──────────────────────────────────── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--purple);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:all .25s;white-space:nowrap;z-index:999}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Empty state ────────────────────────────── */
+.empty{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty-icon{font-size:36px;margin-bottom:12px}
+.empty-title{font-size:15px;font-weight:500;color:var(--text2);margin-bottom:6px}
+.empty-sub{font-size:13px}
+
+/* ── Statistics ─────────────────────────────── */
+.stats-section{margin-bottom:28px}
+.stats-section-title{font-family:'Lexend Giga',sans-serif;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.3px;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.stats-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:28px}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.kpi-grey::before{background:#6B7280}
+.kpi-yellow::before{background:#F59E0B}
+.kpi-blue::before{background:#3B82F6}
+.kpi-green::before{background:#10B981}
+.kpi-red::before{background:#EF4444}
+.kpi-label{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;font-family:'Lexend Giga',sans-serif}
+.kpi-val{font-family:'Lexend Giga',sans-serif;font-size:26px;font-weight:700;color:var(--text);line-height:1}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:5px}
+.kpi-pct{font-size:12px;font-weight:600;margin-top:4px}
+.stats-2col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.stats-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.stat-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
+.stat-box-title{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:16px;font-family:'Lexend Giga',sans-serif}
+.conv-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.conv-from{font-size:12px;color:var(--text2);width:110px;flex-shrink:0}
+.conv-arrow{font-size:11px;color:var(--text3)}
+.conv-to{font-size:12px;color:var(--text2);width:110px;flex-shrink:0}
+.conv-bar-wrap{flex:1;background:var(--border);border-radius:3px;height:6px;overflow:hidden}
+.conv-bar{height:6px;border-radius:3px}
+.conv-pct{font-size:12px;font-weight:700;width:36px;text-align:right;flex-shrink:0}
+.ind-stat-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.ind-stat-row:last-child{border-bottom:none}
+.ind-stat-name{font-size:13px;color:var(--text2);flex:1}
+.ind-stat-bar-wrap{width:100px;background:var(--border);border-radius:3px;height:6px;overflow:hidden;flex-shrink:0}
+.ind-stat-bar{height:6px;border-radius:3px;background:var(--purple);transition:width .5s}
+.ind-stat-count{font-size:12px;font-weight:700;color:var(--text);width:20px;text-align:right;flex-shrink:0}
+.ind-stat-pct{font-size:11px;color:var(--text3);width:32px;text-align:right;flex-shrink:0}
+.priority-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.priority-item:last-child{border-bottom:none}
+.priority-item:hover .priority-name{color:var(--purple-light)}
+.priority-rank{font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);width:20px;flex-shrink:0;padding-top:2px}
+.priority-info{flex:1}
+.priority-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px;transition:color .15s}
+.priority-detail{font-size:11px;color:var(--text3)}
+.priority-stage{flex-shrink:0}
+.activity-feed-item{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.activity-feed-item:last-child{border-bottom:none}
+.af-dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.af-content{flex:1}
+.af-name{font-size:12px;font-weight:500;color:var(--text);margin-bottom:1px}
+.af-text{font-size:12px;color:var(--text3)}
+.af-date{font-size:11px;color:var(--text3);flex-shrink:0;margin-left:auto;padding-top:2px}
+.cold-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer}
+.cold-item:last-child{border-bottom:none}
+.cold-item:hover .cold-name{color:var(--purple-light)}
+.cold-name{font-size:13px;font-weight:500;color:var(--text);flex:1;transition:color .15s}
+.cold-cat{font-size:11px;color:var(--text3)}
+.cold-action{font-size:11px;color:var(--yellow);max-width:160px;text-align:right}
+.donut-wrap{display:flex;align-items:center;gap:20px}
+.donut-legend{flex:1}
+.donut-leg-item{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.donut-leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.donut-leg-label{font-size:12px;color:var(--text2);flex:1}
+.donut-leg-val{font-size:12px;font-weight:700;color:var(--text)}
+.gauge-wrap{text-align:center;padding:8px 0}
+.gauge-val{font-family:'Lexend Giga',sans-serif;font-size:28px;font-weight:700;color:var(--text);margin-top:8px}
+
+/* ── Segment Management ─────────────────────────── */
+.sb-seg-header{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 4px;margin-top:8px}
+.sb-seg-header .sb-section{padding:0}
+.seg-add-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--purple-light);font-size:16px;cursor:pointer;padding:0 7px;line-height:22px;transition:all .15s}
+.seg-add-btn:hover{background:var(--purple-bg);border-color:var(--purple-dim)}
+.seg-nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;color:var(--text2);transition:all .15s;margin-bottom:2px;border:1px solid transparent;position:relative}
+.seg-nav-item:hover{background:var(--card);color:var(--text)}
+.seg-nav-item:hover .seg-del-btn{opacity:1}
+.seg-nav-item.active{background:var(--purple-bg);color:var(--purple-light);border-color:var(--purple-dim)}
+.seg-del-btn{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;opacity:0;transition:opacity .15s;padding:0 2px;line-height:1}
+.seg-del-btn:hover{color:var(--red)}
+.emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:6px}
+.emoji-opt{padding:8px 4px;border-radius:8px;border:1px solid var(--border);font-size:18px;cursor:pointer;text-align:center;transition:all .15s;background:var(--surface)}
+.emoji-opt:hover{border-color:var(--purple-dim);background:var(--purple-bg)}
+.emoji-opt.sel{border-color:var(--purple-light);background:var(--purple-bg);box-shadow:0 0 0 2px var(--purple-dim)}
+.color-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.color-opt:hover{transform:scale(1.1)}
+.color-opt.sel{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,0.4)}
+
+
+/* ── Login Screen ───────────────────────────── */
+.login-screen{position:fixed;inset:0;background:#060C18;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column}
+.login-screen::before{content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:700px;height:400px;background:radial-gradient(ellipse,rgba(2,74,165,0.25) 0%,transparent 65%);pointer-events:none}
+.login-screen::after{content:'';position:absolute;bottom:0;left:0;right:0;height:200px;background:radial-gradient(ellipse at 50% 100%,rgba(2,74,165,0.1) 0%,transparent 70%);pointer-events:none}
+.login-card{background:rgba(10,22,40,0.95);border:1px solid #1A3260;border-radius:20px;padding:44px 44px 40px;width:420px;position:relative;z-index:1;backdrop-filter:blur(20px)}
+.login-logo-wrap{display:flex;align-items:center;gap:14px;margin-bottom:32px;justify-content:center}
+.login-mark{width:52px;height:52px;background:#024AA5;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.login-brand{text-align:left}
+.login-brand-name{font-family:'Lexend Giga',sans-serif;font-size:22px;font-weight:700;color:#EFF6FF;letter-spacing:3px}
+.login-brand-sub{font-size:10px;color:#82CCFA;letter-spacing:2px;text-transform:uppercase;margin-top:3px}
+.login-title{font-family:'Lexend Giga',sans-serif;font-size:13px;font-weight:600;color:#EFF6FF;margin-bottom:6px;letter-spacing:.5px}
+.login-sub{font-size:13px;color:#3E6080;margin-bottom:28px}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#3E6080;margin-bottom:6px;font-family:'Lexend Giga',sans-serif}
+.login-field input{width:100%;padding:12px 14px;background:#080F1E;border:1px solid #1A3260;border-radius:10px;font-size:14px;color:#EFF6FF;font-family:'Libre Franklin',sans-serif;transition:border-color .15s,box-shadow .15s}
+.login-field input:focus{outline:none;border-color:#024AA5;box-shadow:0 0 0 3px rgba(2,74,165,0.2)}
+.login-field input::placeholder{color:#3E6080}
+.login-btn{width:100%;padding:14px;background:#024AA5;color:#fff;border:none;border-radius:10px;font-family:'Lexend Giga',sans-serif;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;margin-top:8px;transition:background .15s,transform .1s}
+.login-btn:hover{background:#0358C4;transform:translateY(-1px)}
+.login-btn:active{transform:translateY(0)}
+.login-err{color:#EF4444;font-size:12px;text-align:center;margin-top:10px;min-height:18px;font-weight:500}
+.login-footer{font-size:11px;color:#1A3260;text-align:center;margin-top:20px}
+.logout-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;padding:5px 10px;width:100%;margin-top:8px;font-family:'Libre Franklin',sans-serif;transition:all .15s}
+.logout-btn:hover{border-color:var(--red);color:var(--red)}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+</style>
+</head>
+<body>
+<!-- Login Screen -->
+<div class="login-screen" id="login-screen">
+  <div class="login-card">
+    <div class="login-logo-wrap">
+      <div class="login-mark">
+        <svg width="28" height="32" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="2,2 78,2 78,50 44,50 44,30 2,30" fill="#FFFFFF"/>
+          <polygon points="78,88 2,88 2,40 36,40 36,60 78,60" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <div class="login-brand">
+        <div class="login-brand-name">SYNAPSE</div>
+        <div class="login-brand-sub">AI Automization</div>
+      </div>
+    </div>
+    <div class="login-title">Welcome back</div>
+    <div class="login-sub">Sign in to access your CRM pipeline</div>
+    <div class="login-field">
+      <label>Username</label>
+      <input type="text" id="login-user" placeholder="Enter your username" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="login-pass" placeholder="Enter your password" autocomplete="current-password" onkeydown="if(event.key==='Enter')attemptLogin()">
+    </div>
+    <button class="login-btn" onclick="attemptLogin()">Sign In</button>
+    <div class="login-err" id="login-err"></div>
+    <div class="login-footer">Synapse CRM — GTA Pipeline · Private Access Only</div>
+  </div>
+</div>
+
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-inner">
+      <div class="sb-mark">
+        <svg width="22" height="25" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="2,2 78,2 78,50 44,50 44,30 2,30" fill="#FFFFFF"/>
+          <polygon points="78,88 2,88 2,40 36,40 36,60 78,60" fill="#FFFFFF"/>
+        </svg>
+      </div>
+      <div>
+        <div class="sb-name">SYNAPSE</div>
+        <div class="sb-sub">AI AUTOMIZATION</div>
+      </div>
+    </div>
+  </div>
+  <div class="sb-nav">
+    <div class="sb-section">Main</div>
+    <div class="nav-item active" onclick="showView('dashboard')">
+      <span class="icon">◉</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showView('pipeline')">
+      <span class="icon">⬡</span> Pipeline
+      <span class="nav-badge" id="pipeline-badge">0</span>
+    </div>
+    <div class="nav-item" onclick="showView('prospects')">
+      <span class="icon">≡</span> All Prospects
+      <span class="nav-badge" id="prospects-badge">0</span>
+    </div>
+    <div class="nav-item" onclick="showView('stats')">
+      <span class="icon">▲</span> Statistics
+    </div>
+    <div class="sb-seg-header">
+      <span class="sb-section" style="margin-top:8px;padding:0">Segments</span>
+      <button class="seg-add-btn" onclick="openSegmentModal()" title="Add segment">+</button>
+    </div>
+    <div id="segment-nav"></div>
+  </div>
+  <div class="sb-bottom">
+    <div class="sb-user" id="sb-user-info">
+      <div class="sb-avatar" id="sb-avatar">??</div>
+      <div>
+        <div class="sb-uname" id="sb-uname">—</div>
+        <div class="sb-role">Synapse — Caledon, ON</div>
+      </div>
+    </div>
+    <button class="btn-add" style="margin-top:10px" onclick="openModal()">+ Add Prospect</button>
+    <button class="logout-btn" onclick="logout()">Sign Out</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="page-title" id="page-title">Dashboard</div>
+    <div class="topbar-right">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Search prospects..." oninput="handleSearch()">
+      </div>
+      <div id="filter-btns" style="display:none;gap:6px;align-items:center"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="view" id="view-dashboard"></div>
+    <div class="view" id="view-pipeline" style="display:none;overflow-x:auto;padding:24px"></div>
+    <div class="view" id="view-prospects" style="display:none"></div>
+    <div class="view" id="view-stats" style="display:none;overflow-y:auto"></div>
+    <div class="detail-panel" id="detail-panel"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Add New Prospect</div>
+    <div class="modal-sub">Enter the lead details below</div>
+    <div class="modal-grid">
+      <div class="modal-field"><label>Business Name *</label><input id="m-name" type="text" placeholder="e.g. Royal Plumbing Services"></div>
+      <div class="modal-field"><label>Category *</label>
+        <select id="m-cat"></select>
+      </div>
+      <div class="modal-field full"><label>Street Address</label><input id="m-addr" type="text" placeholder="123 King St W, Toronto, ON"></div>
+      <div class="modal-field"><label>Phone</label><input id="m-phone" type="text" placeholder="+1 416-555-1234"></div>
+      <div class="modal-field"><label>Email</label><input id="m-email" type="text" placeholder="owner@business.com"></div>
+      <div class="modal-field"><label>Owner / Contact Name</label><input id="m-owner" type="text" placeholder="First name"></div>
+      <div class="modal-field"><label>Last Contact Date</label><input id="m-date" type="date"></div>
+      <div class="modal-field full"><label>Synapse Opportunity</label><textarea id="m-opp" placeholder="What automation gap does this business have?"></textarea></div>
+      <div class="modal-field full"><label>Next Action</label><input id="m-action" type="text" placeholder="e.g. Send proposal by Friday"></div>
+      <div class="modal-field full"><label>Notes</label><textarea id="m-notes" placeholder="Context from call, visit, or research..."></textarea></div>
+      <div class="modal-field full">
+        <label>Pipeline Stage</label>
+        <div class="modal-stage-grid" id="modal-stage-grid">
+          <button class="modal-stage-btn sel" style="background:#6B7280;color:#fff" onclick="selectModalStage(this,'NOT CONTACTED')">Not Contacted</button>
+          <button class="modal-stage-btn" style="background:#F59E0B;color:#1A1035" onclick="selectModalStage(this,'AUDIT BOOKED')">Audit Booked</button>
+          <button class="modal-stage-btn" style="background:#3B82F6;color:#fff" onclick="selectModalStage(this,'QUOTE ACCEPTED')">Quote Accepted</button>
+          <button class="modal-stage-btn" style="background:#10B981;color:#fff" onclick="selectModalStage(this,'TERMS ACCEPTED')">Terms Accepted</button>
+          <button class="modal-stage-btn" style="background:#EF4444;color:#fff" onclick="selectModalStage(this,'LOST / DEAD')">Lost / Dead</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="saveProspect()">Save Prospect</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Segment Modal -->
+<div class="modal-overlay" id="seg-modal-overlay" onclick="if(event.target===this)closeSegmentModal()">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title" id="seg-modal-title">Add Segment</div>
+    <div class="modal-sub">Create a new industry category for your pipeline</div>
+    <div style="margin-bottom:14px">
+      <div class="modal-field" style="margin-bottom:14px">
+        <label>Segment Name *</label>
+        <input id="seg-name" type="text" placeholder="e.g. Automotive, Wellness, Real Estate">
+      </div>
+      <div class="modal-field" style="margin-bottom:14px">
+        <label>Icon — pick one</label>
+        <div class="emoji-grid" id="emoji-grid"></div>
+      </div>
+      <div class="modal-field">
+        <label>Accent Colour</label>
+        <div class="color-grid" id="color-grid"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="saveSegment()">Save Segment</button>
+      <button class="btn-secondary" onclick="closeSegmentModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════
+const DEFAULT_PROSPECTS = [
+  // RESTAURANTS
+  {id:'r1',name:'Dumpling Drip',cat:'Restaurants',status:'NOT CONTACTED',address:'37 Blue Jays Way, Toronto, ON',phone:'+1 437-286-3843',email:'',owner:'Chef Eric',opp:'Brand new indie, zero tech stack. CRM, booking automation, social follow-up.',action:'Cold call — ask for Chef Eric',notes:'Owner-op. Halal menu. Strong early reviews. Ideal for first AI marketing workflow.',activities:[]},
+  {id:'r2',name:"John's Family Restaurant",cat:'Restaurants',status:'NOT CONTACTED',address:'1 Fisherman Dr, Brampton, ON',phone:'+1 905-840-8888',email:'',owner:'Vicky (Manager)',opp:'High-volume diner. Re-engagement & review management automation.',action:'Cold call — mention high volume, missed review responses',notes:'2,447 reviews. Very responsive regulars.',activities:[]},
+  {id:'r3',name:"ZET'S Restaurant",cat:'Restaurants',status:'NOT CONTACTED',address:'6445 Airport Rd, Mississauga, ON',phone:'+1 289-800-2038',email:'',owner:'Unknown',opp:'TikTok-driven traffic, no CRM or loyalty system. Customer re-engagement + email capture.',action:'Cold call or walk in — ask for owner',notes:"8,564 reviews — huge audience with zero loyalty infrastructure.",activities:[]},
+  {id:'r4',name:'Orchard Family Restaurant',cat:'Restaurants',status:'NOT CONTACTED',address:'2550 Hurontario St, Mississauga, ON',phone:'+1 905-279-8220',email:'',owner:'Unknown',opp:'25-year diner. No digital presence. Review management + customer loyalty automation.',action:'Walk-in during off-peak hours',notes:'Loyal base but no online engagement.',activities:[]},
+  {id:'r5',name:'Little South Bistro',cat:'Restaurants',status:'NOT CONTACTED',address:'5165 Dixie Rd, Mississauga, ON',phone:'+1 289-748-2473',email:'',owner:'Unknown',opp:'Event venue + restaurant combo. Event follow-up automation, booking AI, loyalty CRM.',action:'Cold call — pitch event automation angle',notes:'4,429 reviews. Live music venue + restaurant.',activities:[]},
+  {id:'r6',name:"Peter's on Eglinton",cat:'Restaurants',status:'NOT CONTACTED',address:'1035 Eglinton Ave E, Mississauga, ON',phone:'Walk in — no public number',email:'',owner:'Peter',opp:'Institution-style diner, owner-dependent. Operational automation + review management.',action:'Walk in — ask for Peter directly',notes:"3,264 reviews. 'Peter is always there' — perfect audit candidate.",activities:[]},
+  // RETAIL
+  {id:'t1',name:'The Wanderly',cat:'Retail',status:'NOT CONTACTED',address:'1613 Dundas St W, Toronto, ON',phone:'+1 416-516-0930',email:'',owner:'Unknown',opp:"Reviews mention 'never answers phone' — AI answering + CRM.",action:'Cold call — highlight missed call automation',notes:'Phone responsiveness cited as issue in reviews. Immediate ROI case.',activities:[]},
+  {id:'t2',name:'The Citizen Room',cat:'Retail',status:'NOT CONTACTED',address:'982 Queen St W, Toronto, ON',phone:'+1 416-303-0661',email:'',owner:'Paula',opp:'European designer boutique. Very small review count = low visibility. SEO + CRM build.',action:'Cold call — ask for Paula',notes:'22 reviews. High-quality product, low digital reach.',activities:[]},
+  {id:'t3',name:'Must Boutique',cat:'Retail',status:'NOT CONTACTED',address:'1673 Bayview Ave, Toronto, ON',phone:'+1 416-792-4670',email:'',owner:'Owner',opp:'Service inconsistency flagged in reviews. Staff training automation + follow-up CRM.',action:'Cold call — reference customer experience improvements',notes:'27 reviews. Mixed service feedback = retention risk.',activities:[]},
+  {id:'t4',name:'Posh Boutique',cat:'Retail',status:'NOT CONTACTED',address:'2016 Queen St E, Toronto, ON',phone:'+1 416-690-5533',email:'',owner:'Sharon',opp:'Neighbourhood gem with loyal regulars. Loyalty program automation + seasonal campaigns.',action:'Cold call — pitch loyalty & repeat customer automation',notes:'63 reviews, 4.9 stars. Strong loyal base with zero digital CRM.',activities:[]},
+  {id:'t5',name:'SOLOUK',cat:'Retail',status:'NOT CONTACTED',address:'817 Dundas St W, Toronto, ON',phone:'+1 437-446-2231',email:'',owner:'Mohy',opp:'Brand new boutique — first-mover advantage: set up full tech stack from day 1.',action:'Cold call — ask for Mohy, position as tech partner from launch',notes:'Opened recently. Iranian design house. No tech infrastructure yet.',activities:[]},
+  {id:'t6',name:'PLRG / Poor Little Rich Girl',cat:'Retail',status:'NOT CONTACTED',address:'2094 Yonge St, Toronto, ON',phone:'+1 416-322-7574',email:'',owner:'Sarah',opp:'Owner-curated dress boutique. Clienteling automation + event/occasion follow-up CRM.',action:'Cold call — ask for Sarah',notes:'Sarah personally serves customers. Relationship-driven = ideal for AI clienteling.',activities:[]},
+  {id:'t7',name:'Zumel & Co.',cat:'Retail',status:'NOT CONTACTED',address:'863 Queen St W, Toronto, ON',phone:'+1 416-603-0888',email:'',owner:'Cody',opp:'Strong stylist culture. Personal shopper AI workflow + post-visit follow-up automation.',action:'Cold call — reference their personal shopping model',notes:'157 reviews, 4.9 stars.',activities:[]},
+  {id:'t8',name:'Tusk',cat:'Retail',status:'NOT CONTACTED',address:'888 Queen St W, Toronto, ON',phone:'+1 416-532-0510',email:'',owner:'Nicole',opp:'Curated indie boutique. Email capture + loyalty re-engagement automation.',action:'Cold call — ask for Nicole',notes:'38 reviews. Owner Nicole hands-on. Small but devoted customer base.',activities:[]},
+  // TRADES
+  {id:'h1',name:'Royal Plumbing Services',cat:'Trades',status:'NOT CONTACTED',address:'614 Dufferin St, Toronto, ON',phone:'+1 416-537-0038',email:'',owner:'Matthew',opp:'Owner handles all bookings manually. AI scheduling + missed call capture + review follow-up.',action:'Cold call — ask for Matthew by name',notes:'769 reviews, 4.9 stars. Matthew does every job himself.',activities:[]},
+  {id:'h2',name:'LTD Plumbing & Mechanical',cat:'Trades',status:'NOT CONTACTED',address:'25 Rhydwen Ave, Toronto, ON',phone:'+1 416-802-4486',email:'',owner:'Brandon',opp:'Referral-only, no lead capture. Lead funnel automation + quote follow-up + CRM build.',action:'Cold call — ask for Brandon',notes:'2-man shop. 34 reviews. Referral-dependent = leaving money on table.',activities:[]},
+  {id:'h3',name:'Green Heating & Air Inc.',cat:'Trades',status:'NOT CONTACTED',address:'1373 Bathurst St, Toronto, ON',phone:'+1 416-627-7724',email:'',owner:'Hassan',opp:'24/7 emergency HVAC. Massive missed call risk. AI answering agent = immediate ROI.',action:'Cold call — ask for Hassan, open with missed call stat',notes:'179 reviews, 4.9 stars. Hassan personally responds nights/weekends.',activities:[]},
+  {id:'h4',name:'Hydrotech Mechanical',cat:'Trades',status:'NOT CONTACTED',address:'5 Wallbridge Ct, North York, ON',phone:'+1 647-535-2030',email:'',owner:'Mahdi',opp:'Boutique HVAC shop, low review count. Review generation + booking automation.',action:'Cold call — ask for Mahdi',notes:'23 reviews. Quality work, low visibility.',activities:[]},
+  {id:'h5',name:'Handyman Mississauga Contracting',cat:'Trades',status:'NOT CONTACTED',address:'1140 Burnhamthorpe Rd W, Mississauga, ON',phone:'+1 416-301-4867',email:'',owner:'Davin',opp:'Growing team, manual quoting. Quote automation + project follow-up + client portal.',action:'Cold call — ask for Davin',notes:'152 reviews, 4.9 stars. Team expanding.',activities:[]},
+  {id:'h6',name:'Sams Handyman Services',cat:'Trades',status:'NOT CONTACTED',address:'5264 Fairford Crescent, Mississauga, ON',phone:'+1 416-509-4619',email:'',owner:'Sam',opp:'Solo operator, referral-driven. Lead capture + automated follow-up + scheduling AI.',action:'Cold call — ask for Sam',notes:'233 reviews. Sam does everything himself.',activities:[]},
+  {id:'h7',name:'The Happy Handyman',cat:'Trades',status:'NOT CONTACTED',address:'1158 Meander Ct, Mississauga, ON',phone:'+1 437-974-2639',email:'',owner:'Carmine',opp:'Zero tech presence. AI answering, lead intake, automated review requests post-job.',action:'Cold call — ask for Carmine',notes:'37 reviews, 5 stars.',activities:[]},
+  {id:'h8',name:'Prime Handyman & Cleaning',cat:'Trades',status:'NOT CONTACTED',address:'4355 Trail Blazer Way, Mississauga, ON',phone:'+1 647-385-3089',email:'',owner:'Kevin',opp:'Reviews highlight email communication as positive. Formalise this with AI CRM.',action:'Cold call — ask for Kevin, reference his communication style',notes:'38 reviews, 4.9 stars.',activities:[]},
+  {id:'h9',name:'Me and My Van Home Repair',cat:'Trades',status:'NOT CONTACTED',address:'1093 Lakeshore Rd E, Mississauga, ON',phone:'+1 289-203-2484',email:'',owner:'Perry',opp:'Multi-service team, growing volume. Job workflow automation + CRM + invoice follow-up.',action:'Cold call — ask for Perry',notes:'175 reviews, 4.8 stars.',activities:[]},
+  {id:'h10',name:'HandyBros Renovations',cat:'Trades',status:'NOT CONTACTED',address:'1359 Rathburn Rd E, Mississauga, ON',phone:'+1 647-994-7216',email:'',owner:'Rob',opp:'Reno contractor, manual quoting. AI quote builder + client update automation.',action:'Cold call — ask for Rob',notes:'149 reviews, 4.9 stars.',activities:[]},
+  {id:'h11',name:'Handyman in Mississauga',cat:'Trades',status:'NOT CONTACTED',address:'1103 Mesa Crescent, Mississauga, ON',phone:'+1 647-624-7843',email:'',owner:'Ayaz',opp:'Small reno team. Post-job review automation + referral follow-up workflow.',action:'Cold call — ask for Ayaz or Masum',notes:'12 reviews. New but strong.',activities:[]},
+  {id:'h12',name:'Lion of Construction & Landscaping',cat:'Trades',status:'NOT CONTACTED',address:'656 Eversley Dr, Mississauga, ON',phone:'+1 437-988-8822',email:'',owner:'Unknown',opp:'Seasonal business (snow/landscaping). Seasonal campaign automation + booking AI.',action:'Cold call — pitch seasonal automation use case',notes:'87 reviews, 5 stars.',activities:[]},
+  // 4MenUnited (active audit)
+  {id:'a1',name:'4MenUnited',cat:'Retail',status:'AUDIT BOOKED',address:'Greater Toronto Area',phone:'',email:'',owner:'Owner',opp:"Men's boutique retail — full AI stack: clienteling, inventory insights, booking, follow-up CRM. Jesta IS reference point from Harry Rosen conversation.",action:'Prepare audit presentation — Jesta vs Synapse positioning',notes:"First booked audit. Owner mentioned Harry Rosen's Jesta IS system. Audit secured via cold call.",activities:[{date:new Date().toLocaleDateString(),type:'call',text:'Secured free consultation via cold call. Owner mentioned Harry Rosen Jesta IS reference.'}]}
+];
+
+// ════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════
+const STORAGE_KEY = 'synapse_crm_v1';
+const SEG_KEY = 'synapse_segments_v1';
+
+const DEFAULT_SEGMENTS = [
+  {id:'restaurants', name:'Restaurants', icon:'🍽', color:'#EF4444'},
+  {id:'retail',      name:'Retail',       icon:'👔', color:'#2D7DD2'},
+  {id:'trades',      name:'Trades',       icon:'🔧', color:'#F59E0B'},
+];
+
+const EMOJI_OPTS = ['🍽','👔','🔧','🏥','🏠','🚗','💈','🎓','💼','🏋','🏪','💅','🌿','🐾','📸','🎵','🍕','☕','🛒','🏗','⚡','🚿','❄️','🌱'];
+const COLOR_OPTS = ['#EF4444','#F59E0B','#10B981','#2D7DD2','#8B5CF6','#EC4899','#14B8A6','#F97316','#6366F1','#84CC16','#06B6D4','#A855F7'];
+
+let prospects = [];
+let segments  = [];
+let currentView = 'dashboard';
+let activeFilter = 'all';
+let selectedId = null;
+let editingId = null;
+let modalStatus = 'NOT CONTACTED';
+let searchQuery = '';
+let selectedEmoji = '📁';
+let selectedColor = '#2D7DD2';
+let editingSegId = null;
+
+function loadData(){
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if(saved){ prospects = JSON.parse(saved); }
+    else { prospects = DEFAULT_PROSPECTS; save(); }
+  }catch(e){ prospects = DEFAULT_PROSPECTS; }
+}
+function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(prospects)); }
+function genId(){ return 'p'+Date.now()+Math.random().toString(36).slice(2,6); }
+
+function loadSegments(){
+  try{
+    const saved = localStorage.getItem(SEG_KEY);
+    segments = saved ? JSON.parse(saved) : DEFAULT_SEGMENTS;
+  }catch(e){ segments = DEFAULT_SEGMENTS; }
+}
+function saveSegments(){ localStorage.setItem(SEG_KEY, JSON.stringify(segments)); }
+
+function getSegIcon(cat){ return (segments.find(s=>s.name===cat)||{icon:'◆'}).icon; }
+function getSegColor(cat){ return (segments.find(s=>s.name===cat)||{color:'#6B7280'}).color; }
+
+// ════════════════════════════════════════════════
+// ROUTING
+// ════════════════════════════════════════════════
+const STAGES = ['NOT CONTACTED','AUDIT BOOKED','QUOTE ACCEPTED','TERMS ACCEPTED','LOST / DEAD'];
+const STAGE_STYLE = {
+  'NOT CONTACTED': {pill:'pill-grey',dot:'#6B7280',bar:'#6B7280',kanban:'#1C1C24',kh:'#252532',kt:'#9CA3AF',kc:'rgba(107,114,128,.2)'},
+  'AUDIT BOOKED':  {pill:'pill-yellow',dot:'#F59E0B',bar:'#F59E0B',kanban:'#1C1800',kh:'#241F00',kt:'#FCD34D',kc:'rgba(245,158,11,.2)'},
+  'QUOTE ACCEPTED':{pill:'pill-blue',dot:'#3B82F6',bar:'#3B82F6',kanban:'#0A1020',kh:'#0D1428',kt:'#60A5FA',kc:'rgba(59,130,246,.2)'},
+  'TERMS ACCEPTED':{pill:'pill-green',dot:'#10B981',bar:'#10B981',kanban:'#051410',kh:'#071A12',kt:'#34D399',kc:'rgba(16,185,129,.2)'},
+  'LOST / DEAD':   {pill:'pill-red',dot:'#EF4444',bar:'#EF4444',kanban:'#1A0808',kh:'#200A0A',kt:'#F87171',kc:'rgba(239,68,68,.2)'},
+};
+// CAT_ICON replaced by dynamic getSegIcon()
+
+function showView(v){
+  currentView = v;
+  ['dashboard','pipeline','prospects','stats'].forEach(x=>{
+    document.getElementById('view-'+x).style.display = x===v?'':'none';
+  });
+  document.querySelectorAll('.nav-item,.seg-nav-item').forEach(el=>el.classList.remove('active'));
+  const titles = {dashboard:'Dashboard',pipeline:'Pipeline',prospects:'All Prospects',stats:'Statistics'};
+  document.getElementById('page-title').textContent = titles[v]||v;
+  const showFilters = v==='prospects'||v==='pipeline';
+  const fb = document.getElementById('filter-btns');
+  fb.style.display = showFilters ? 'flex' : 'none';
+  if(showFilters) renderFilterBtns();
+  closeDetail();
+  render();
+}
+
+function setFilter(f){
+  activeFilter = f;
+  renderSegmentNav();
+  renderFilterBtns();
+  render();
+}
+
+function renderSegmentNav(){
+  const nav = document.getElementById('segment-nav');
+  if(!nav) return;
+  nav.innerHTML = segments.map(seg=>`
+    <div class="seg-nav-item ${activeFilter===seg.name?'active':''}"
+         onclick="showView('prospects');setFilter('${seg.name}')">
+      <span style="font-size:15px;width:18px;text-align:center">${seg.icon}</span>
+      <span style="flex:1">${seg.name}</span>
+      <span class="nav-badge" style="background:${seg.color}22;color:${seg.color}">
+        ${prospects.filter(p=>p.cat===seg.name).length}
+      </span>
+      <button class="seg-del-btn" onclick="event.stopPropagation();confirmDeleteSegment('${seg.id}')" title="Delete segment">×</button>
+    </div>`).join('');
+}
+
+function renderFilterBtns(){
+  const fb = document.getElementById('filter-btns');
+  if(!fb) return;
+  const allActive = activeFilter==='all';
+  fb.innerHTML = `<button class="filter-btn ${allActive?'active':''}" onclick="setFilter('all')">All</button>`
+    + segments.map(seg=>`
+      <button class="filter-btn ${activeFilter===seg.name?'active':''}"
+              onclick="setFilter('${seg.name}')"
+              style="${activeFilter===seg.name?'border-color:'+seg.color+';color:'+seg.color+';background:'+seg.color+'15':''}">
+        ${seg.icon} ${seg.name}
+      </button>`).join('');
+}
+
+function populateCatSelect(currentVal){
+  const sel = document.getElementById('m-cat');
+  if(!sel) return;
+  sel.innerHTML = segments.map(seg=>`<option value="${seg.name}">${seg.icon} ${seg.name}</option>`).join('');
+  if(currentVal) sel.value = currentVal;
+}
+function handleSearch(){ searchQuery = document.getElementById('search-input').value.toLowerCase(); render(); }
+
+function filtered(){
+  return prospects.filter(p=>{
+    const catMatch = activeFilter==='all'||p.cat===activeFilter;
+    const q = searchQuery;
+    const textMatch = !q || p.name.toLowerCase().includes(q)||p.owner.toLowerCase().includes(q)||p.phone.includes(q)||(p.email||'').toLowerCase().includes(q)||(p.notes||'').toLowerCase().includes(q);
+    return catMatch && textMatch;
+  });
+}
+
+// ════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════
+function render(){
+  updateBadges();
+  if(currentView==='dashboard') renderDashboard();
+  if(currentView==='pipeline')  renderPipeline();
+  if(currentView==='prospects') renderProspects();
+  if(currentView==='stats')     renderStats();
+}
+
+function updateBadges(){
+  document.getElementById('pipeline-badge').textContent = prospects.filter(p=>p.status!=='NOT CONTACTED'&&p.status!=='LOST / DEAD').length;
+  document.getElementById('prospects-badge').textContent = prospects.length;
+}
+
+// ── Dashboard ────────────────────────────────────
+function renderDashboard(){
+  const el = document.getElementById('view-dashboard');
+  const total = prospects.length;
+  const active = prospects.filter(p=>p.status!=='NOT CONTACTED'&&p.status!=='LOST / DEAD').length;
+  const clients = prospects.filter(p=>p.status==='TERMS ACCEPTED').length;
+  const audits = prospects.filter(p=>p.status==='AUDIT BOOKED').length;
+
+  // upcoming actions
+  const upcoming = prospects.filter(p=>p.action&&p.status!=='LOST / DEAD').slice(0,5);
+
+  const stageCounts = {};
+  STAGES.forEach(s=>stageCounts[s]=prospects.filter(p=>p.status===s).length);
+  const maxCount = Math.max(...Object.values(stageCounts),1);
+
+  const catCounts = {};
+  segments.forEach(s=>{catCounts[s.name]=0;});
+  prospects.forEach(p=>catCounts[p.cat]=(catCounts[p.cat]||0)+1);
+
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Prospects</div>
+        <div class="stat-val">${total}</div>
+        <div class="stat-sub">GTA pipeline</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Leads</div>
+        <div class="stat-val" style="color:#82CCFA">${active}</div>
+        <div class="stat-sub">In pipeline</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Audits Booked</div>
+        <div class="stat-val" style="color:#F59E0B">${audits}</div>
+        <div class="stat-sub">Free consultation</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Clients</div>
+        <div class="stat-val" style="color:#10B981">${clients}</div>
+        <div class="stat-sub">Terms accepted</div>
+      </div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card">
+        <div class="dash-card-title">Pipeline Funnel</div>
+        ${STAGES.map(s=>{
+          const st = STAGE_STYLE[s];
+          const w = Math.round((stageCounts[s]/maxCount)*100);
+          return `<div class="funnel-row">
+            <div class="funnel-label"><span class="stat-dot" style="background:${st.dot}"></span>${s.charAt(0)+s.slice(1).toLowerCase().split(' ').map((w,i)=>i>0?w.charAt(0).toUpperCase()+w.slice(1):w).join(' ')}</div>
+            <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${w}%;background:${st.bar}"></div></div>
+            <div class="funnel-count">${stageCounts[s]}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">By Industry</div>
+        ${Object.entries(catCounts).map(([cat,count])=>`
+          <div class="industry-row">
+            <div class="ind-name">${getSegIcon(cat)} ${cat}</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="ind-count">${count}</span>
+            </div>
+          </div>
+        `).join('')}
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+          <div class="dash-card-title">Active Audit</div>
+          <div style="background:var(--yellow-bg);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px;font-size:13px;color:#FCD34D;line-height:1.6">
+            <strong>4MenUnited</strong> — Audit secured via cold call.<br>
+            <span style="color:var(--text3);font-size:12px">Prepare Jesta IS vs Synapse positioning before the consultation.</span>
+          </div>
+        </div>
+      </div>
+      <div class="dash-card" style="grid-column:1/-1">
+        <div class="dash-card-title">Next Actions</div>
+        ${upcoming.length===0?`<div style="color:var(--text3);font-size:13px">No upcoming actions.</div>`:
+        upcoming.map(p=>{
+          const st = STAGE_STYLE[p.status];
+          return `<div class="upcoming-item" onclick="openDetail('${p.id}')" style="cursor:pointer">
+            <div class="upcoming-dot" style="background:${st.dot}"></div>
+            <div>
+              <div class="upcoming-name">${p.name} <span style="color:var(--text3);font-size:11px;font-weight:400">${getSegIcon(p.cat)} ${p.cat}</span></div>
+              <div class="upcoming-action">${p.action||'—'}</div>
+            </div>
+            <div style="margin-left:auto"><span class="pill ${st.pill}">${p.status}</span></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+// ── Pipeline Kanban ──────────────────────────────
+function renderPipeline(){
+  const el = document.getElementById('view-pipeline');
+  const list = filtered();
+  el.innerHTML = `<div class="kanban">${STAGES.map(stage=>{
+    const st = STAGE_STYLE[stage];
+    const cards = list.filter(p=>p.status===stage);
+    return `<div class="kanban-col">
+      <div class="kanban-header" style="background:${st.kh};border-color:${st.kc}">
+        <span class="kanban-title" style="color:${st.kt}">${stage}</span>
+        <span class="kanban-count" style="background:${st.kc};color:${st.kt}">${cards.length}</span>
+      </div>
+      <div class="kanban-cards" style="background:${st.kanban};border-color:${st.kc}">
+        ${cards.length===0?`<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">No prospects</div>`:''}
+        ${cards.map(p=>`
+          <div class="k-card" onclick="openDetail('${p.id}')">
+            <div class="k-card-name">${p.name}</div>
+            <div class="k-card-cat">${getSegIcon(p.cat)} ${p.cat}</div>
+            ${p.owner?`<div class="k-card-owner">👤 ${p.owner}</div>`:''}
+            ${p.phone?`<div class="k-card-phone">📞 ${p.phone}</div>`:''}
+            ${p.action?`<div class="k-card-action">→ ${p.action}</div>`:''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// ── Prospects List ───────────────────────────────
+function renderProspects(){
+  const el = document.getElementById('view-prospects');
+  const list = filtered();
+  if(list.length===0){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No prospects found</div><div class="empty-sub">Try a different filter or search term</div></div>`;
+    return;
+  }
+  el.innerHTML=`<table class="prospect-table">
+    <thead><tr>
+      <th>Business</th><th>Category</th><th>Status</th><th>Owner</th><th>Phone</th><th>Next Action</th>
+    </tr></thead>
+    <tbody>${list.map(p=>{
+      const st = STAGE_STYLE[p.status];
+      return `<tr onclick="openDetail('${p.id}')">
+        <td><div class="p-name">${p.name}</div></td>
+        <td><span style="font-size:13px;color:var(--text2)">${getSegIcon(p.cat)} ${p.cat}</span></td>
+        <td><span class="pill ${st.pill}"><span class="pill-dot" style="background:${st.dot}"></span>${p.status}</span></td>
+        <td style="color:var(--text2)">${p.owner||'—'}</td>
+        <td style="color:var(--purple-light);font-size:12px">${p.phone||'—'}</td>
+        <td style="color:var(--text3);font-size:12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.action||'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// ── Statistics ───────────────────────────────────
+function renderStats(){
+  const el = document.getElementById('view-stats');
+  const total = prospects.length;
+
+  // Stage counts
+  const sc = {};
+  STAGES.forEach(s => sc[s] = prospects.filter(p=>p.status===s).length);
+
+  // Category counts
+  const cc = {};
+  segments.forEach(s=>{cc[s.name]=0;});
+  prospects.forEach(p=>cc[p.cat]=(cc[p.cat]||0)+1);
+
+  // Contacted = any stage except NOT CONTACTED
+  const contacted = prospects.filter(p=>p.status!=='NOT CONTACTED').length;
+  const contactRate = total ? Math.round((contacted/total)*100) : 0;
+
+  // Conversion rates between stages
+  const convRates = [
+    {from:'NOT CONTACTED', to:'AUDIT BOOKED', label:'Contact → Audit'},
+    {from:'AUDIT BOOKED',  to:'QUOTE ACCEPTED',label:'Audit → Quote'},
+    {from:'QUOTE ACCEPTED',to:'TERMS ACCEPTED',label:'Quote → Close'},
+  ];
+  const convData = convRates.map(r=>{
+    const fromCount = prospects.filter(p=>
+      STAGES.indexOf(p.status) >= STAGES.indexOf(r.from)).length;
+    const toCount = prospects.filter(p=>
+      STAGES.indexOf(p.status) >= STAGES.indexOf(r.to)).length;
+    const rate = fromCount ? Math.round((toCount/fromCount)*100) : 0;
+    return {...r, fromCount, toCount, rate};
+  });
+
+  // Overall win rate (terms accepted / all that moved past not contacted)
+  const everMoved = prospects.filter(p=>p.status!=='NOT CONTACTED').length;
+  const won = sc['TERMS ACCEPTED'];
+  const winRate = everMoved ? Math.round((won/everMoved)*100) : 0;
+  const lostRate = everMoved ? Math.round((sc['LOST / DEAD']/everMoved)*100) : 0;
+
+  // Priority leads = Audit Booked or Quote Accepted, sorted by most recent activity
+  const hotLeads = prospects
+    .filter(p=>p.status==='AUDIT BOOKED'||p.status==='QUOTE ACCEPTED')
+    .sort((a,b)=>(b.activities?.length||0)-(a.activities?.length||0))
+    .slice(0,6);
+
+  // Cold leads = NOT CONTACTED, no activity except auto-add
+  const coldLeads = prospects
+    .filter(p=>p.status==='NOT CONTACTED')
+    .sort((a,b)=>a.name.localeCompare(b.name))
+    .slice(0,8);
+
+  // Recent activity across all prospects
+  const allActs = [];
+  prospects.forEach(p=>{
+    (p.activities||[]).forEach(a=>{
+      allActs.push({...a, prospectName:p.name, prospectId:p.id, status:p.status});
+    });
+  });
+  const recentActs = allActs
+    .filter(a=>a.text!=='Prospect added to pipeline.')
+    .slice(-12).reverse();
+
+  // Industry breakdown with stage detail
+  const indDetail = segments.map(seg=>{
+    const catProspects = prospects.filter(p=>p.cat===seg.name);
+    const active = catProspects.filter(p=>p.status!=='NOT CONTACTED'&&p.status!=='LOST / DEAD').length;
+    return {cat:seg.name, icon:seg.icon, color:seg.color, total:cc[seg.name]||0, active, won:catProspects.filter(p=>p.status==='TERMS ACCEPTED').length};
+  });
+
+  // SVG Donut chart for stage distribution
+  const donutColors = {'NOT CONTACTED':'#6B7280','AUDIT BOOKED':'#F59E0B','QUOTE ACCEPTED':'#3B82F6','TERMS ACCEPTED':'#10B981','LOST / DEAD':'#EF4444'};
+  const radius = 52, cx = 64, cy = 64, stroke = 14;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  const nonZeroStages = STAGES.filter(s=>sc[s]>0);
+  const donutSegments = nonZeroStages.map(s=>{
+    const pct = sc[s]/total;
+    const dash = pct * circumference;
+    const gap = circumference - dash;
+    const seg = {s, pct, dash, gap, offset, color:donutColors[s]};
+    offset += dash;
+    return seg;
+  });
+  const donutSVG = `<svg width="128" height="128" viewBox="0 0 128 128">
+    <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="#2E2860" stroke-width="${stroke}"/>
+    ${donutSegments.map(seg=>`
+      <circle cx="${cx}" cy="${cy}" r="${radius}" fill="none"
+        stroke="${seg.color}" stroke-width="${stroke}"
+        stroke-dasharray="${seg.dash} ${seg.gap}"
+        stroke-dashoffset="${-seg.offset + circumference/4}"
+        transform="rotate(-90 ${cx} ${cy})"
+        style="transition:all .5s"/>
+    `).join('')}
+    <text x="${cx}" y="${cy-6}" text-anchor="middle" fill="#EFF6FF" font-size="20" font-family="Lexend Giga,sans-serif" font-weight="700">${total}</text>
+    <text x="${cx}" y="${cy+10}" text-anchor="middle" fill="#3E6080" font-size="10" font-family="Libre Franklin,sans-serif">leads</text>
+  </svg>`;
+
+  el.innerHTML = `
+  <!-- KPI row -->
+  <div class="kpi-grid">
+    <div class="kpi-card kpi-grey">
+      <div class="kpi-label">Not Contacted</div>
+      <div class="kpi-val">${sc['NOT CONTACTED']}</div>
+      <div class="kpi-sub">${total?Math.round(sc['NOT CONTACTED']/total*100):0}% of pipeline</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+      <div class="kpi-label">Audits Booked</div>
+      <div class="kpi-val">${sc['AUDIT BOOKED']}</div>
+      <div class="kpi-sub">Free consultations</div>
+    </div>
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-label">Quotes Out</div>
+      <div class="kpi-val">${sc['QUOTE ACCEPTED']}</div>
+      <div class="kpi-sub">Proposals accepted</div>
+    </div>
+    <div class="kpi-card kpi-green">
+      <div class="kpi-label">Active Clients</div>
+      <div class="kpi-val">${sc['TERMS ACCEPTED']}</div>
+      <div class="kpi-sub">Terms signed</div>
+    </div>
+    <div class="kpi-card kpi-red">
+      <div class="kpi-label">Lost / Dead</div>
+      <div class="kpi-val">${sc['LOST / DEAD']}</div>
+      <div class="kpi-sub">${lostRate}% loss rate</div>
+    </div>
+  </div>
+
+  <!-- Row 1: Conversion funnel + Stage donut + Win rate -->
+  <div class="stats-3col">
+    <div class="stat-box">
+      <div class="stat-box-title">Conversion Funnel</div>
+      ${convData.map(r=>{
+        const colors = {'Contact → Audit':'#F59E0B','Audit → Quote':'#3B82F6','Quote → Close':'#10B981'};
+        const col = colors[r.label]||'#024AA5';
+        return `<div class="conv-row">
+          <div class="conv-from" style="font-size:11px">${r.label}</div>
+          <div class="conv-bar-wrap"><div class="conv-bar" style="width:${r.rate}%;background:${col}"></div></div>
+          <div class="conv-pct" style="color:${col}">${r.rate}%</div>
+        </div>`;
+      }).join('')}
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Contact rate</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="conv-bar-wrap"><div class="conv-bar" style="width:${contactRate}%;background:var(--purple-light)"></div></div>
+          <div style="font-size:13px;font-weight:700;color:var(--purple-light)">${contactRate}%</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">${contacted} of ${total} prospects reached</div>
+      </div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-title">Stage Distribution</div>
+      <div class="donut-wrap">
+        ${donutSVG}
+        <div class="donut-legend">
+          ${STAGES.map(s=>`
+            <div class="donut-leg-item">
+              <div class="donut-leg-dot" style="background:${donutColors[s]}"></div>
+              <div class="donut-leg-label">${s.split(' ').slice(0,2).join(' ')}</div>
+              <div class="donut-leg-val">${sc[s]}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-title">Win Rate & Health</div>
+      <div class="gauge-wrap">
+        <svg width="120" height="70" viewBox="0 0 120 70">
+          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="#2E2860" stroke-width="10" stroke-linecap="round"/>
+          <path d="M10 65 A50 50 0 0 1 110 65" fill="none" stroke="#10B981" stroke-width="10" stroke-linecap="round"
+            stroke-dasharray="${winRate*1.571} 157.1" style="transition:all .8s"/>
+          <text x="60" y="60" text-anchor="middle" fill="#10B981" font-size="20" font-family="Lexend Giga,sans-serif" font-weight="700">${winRate}%</text>
+        </svg>
+        <div class="gauge-label">Overall win rate</div>
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--green-bg);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:'Lexend Giga',sans-serif;font-size:18px;font-weight:700;color:#34D399">${won}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Closed</div>
+        </div>
+        <div style="background:var(--red-bg);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:'Lexend Giga',sans-serif;font-size:18px;font-weight:700;color:#F87171">${sc['LOST / DEAD']}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Lost</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;background:var(--yellow-bg);border:1px solid rgba(245,158,11,.15);border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Pipeline health score</div>
+        <div style="font-family:'Lexend Giga',sans-serif;font-size:20px;font-weight:700;color:#FCD34D">${Math.round((sc['AUDIT BOOKED']*25 + sc['QUOTE ACCEPTED']*50 + sc['TERMS ACCEPTED']*100) / Math.max(total,1))}<span style="font-size:13px;font-weight:400;color:var(--text3)"> / 100</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Industry breakdown + Hot leads -->
+  <div class="stats-2col">
+    <div class="stat-box">
+      <div class="stat-box-title">Industry Breakdown</div>
+      ${indDetail.map(({cat,icon,color,total:t,active,won:w})=>{
+        const pct = total ? Math.round(t/total*100) : 0;
+        const segColor = color||getSegColor(cat);
+        return `<div class="ind-stat-row">
+          <div class="ind-stat-name">${icon||getSegIcon(cat)} ${cat}</div>
+          <div class="ind-stat-bar-wrap"><div class="ind-stat-bar" style="width:${pct}%;background:${segColor}"></div></div>
+          <div class="ind-stat-count">${t}</div>
+          <div class="ind-stat-pct">${pct}%</div>
+          <div style="margin-left:6px;display:flex;gap:4px">
+            <span style="font-size:10px;background:rgba(245,158,11,.15);color:#F59E0B;padding:2px 7px;border-radius:10px">${active} active</span>
+            ${w>0?`<span style="font-size:10px;background:rgba(16,185,129,.15);color:#34D399;padding:2px 7px;border-radius:10px">${w} client</span>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Lead distribution</div>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px">
+          ${indDetail.map(({cat,color,total:t})=>{
+            const pct = total ? (t/total*100) : 0;
+            return `<div style="flex:${pct};background:${color||getSegColor(cat)};border-radius:4px;min-width:4px"></div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;gap:12px;margin-top:6px">
+          ${indDetail.map(({cat,color})=>{
+            return `<span style="font-size:10px;color:var(--text3)"><span style="color:${color||getSegColor(cat)}">●</span> ${cat}</span>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-title">Priority Leads — Needs Attention</div>
+      ${hotLeads.length===0
+        ?`<div style="font-size:13px;color:var(--text3)">No active leads yet. Start contacting prospects.</div>`
+        :hotLeads.map((p,i)=>{
+          const st = STAGE_STYLE[p.status];
+          return `<div class="priority-item" onclick="openDetail('${p.id}');showView(currentView)">
+            <div class="priority-rank">${i+1}</div>
+            <div class="priority-info">
+              <div class="priority-name">${p.name}</div>
+              <div class="priority-detail">${getSegIcon(p.cat)} ${p.cat} · ${p.owner||'Unknown owner'}</div>
+              ${p.action?`<div style="font-size:11px;color:var(--yellow);margin-top:2px">→ ${p.action}</div>`:''}
+            </div>
+            <div class="priority-stage"><span class="pill ${st.pill}"><span class="pill-dot" style="background:${st.dot}"></span>${p.status.split(' ')[0]}</span></div>
+          </div>`;
+        }).join('')}
+    </div>
+  </div>
+
+  <!-- Row 3: Cold leads + Activity feed -->
+  <div class="stats-2col">
+    <div class="stat-box">
+      <div class="stat-box-title">Cold Leads — Not Yet Contacted (${sc['NOT CONTACTED']})</div>
+      ${coldLeads.map(p=>`
+        <div class="cold-item" onclick="openDetail('${p.id}');showView(currentView)">
+          <div>
+            <div class="cold-name">${p.name}</div>
+            <div class="cold-cat">${getSegIcon(p.cat)} ${p.cat} ${p.owner?'· '+p.owner:''}</div>
+          </div>
+          <div class="cold-action">${p.action||''}</div>
+        </div>`).join('')}
+      ${sc['NOT CONTACTED']>8?`<div style="font-size:12px;color:var(--text3);padding-top:8px;border-top:1px solid var(--border);margin-top:4px">+${sc['NOT CONTACTED']-8} more — go to All Prospects to view</div>`:''}
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-box-title">Recent Activity Log</div>
+      ${recentActs.length===0
+        ?`<div style="font-size:13px;color:var(--text3)">No activity yet. Log calls and notes on prospect pages.</div>`
+        :recentActs.map(a=>{
+          const st = STAGE_STYLE[a.status]||STAGE_STYLE['NOT CONTACTED'];
+          return `<div class="activity-feed-item">
+            <div class="af-dot" style="background:${st.dot}"></div>
+            <div class="af-content">
+              <div class="af-name">${a.prospectName}</div>
+              <div class="af-text">${a.text}</div>
+            </div>
+            <div class="af-date">${a.date}</div>
+          </div>`;
+        }).join('')}
+    </div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════
+// DETAIL PANEL
+// ════════════════════════════════════════════════
+function openDetail(id){
+  selectedId = id;
+  const p = prospects.find(x=>x.id===id);
+  if(!p) return;
+  const panel = document.getElementById('detail-panel');
+  const st = STAGE_STYLE[p.status];
+
+  panel.innerHTML = `
+    <div class="dp-header">
+      <button class="dp-close" onclick="closeDetail()">✕</button>
+      <div class="dp-name">${p.name}</div>
+      <div class="dp-cat">${getSegIcon(p.cat)} ${p.cat}</div>
+      <div style="margin-top:10px"><span class="pill ${st.pill}"><span class="pill-dot" style="background:${st.dot}"></span>${p.status}</span></div>
+    </div>
+    <div class="dp-body">
+      <div class="dp-section">
+        <div class="dp-section-title">Contact Info</div>
+        ${p.owner?`<div class="dp-field"><span class="dp-field-label">Owner</span><span class="dp-field-val">${p.owner}</span></div>`:''}
+        ${p.phone?`<div class="dp-field"><span class="dp-field-label">Phone</span><span class="dp-field-val" style="color:var(--purple-light)">${p.phone}</span></div>`:''}
+        ${p.email?`<div class="dp-field"><span class="dp-field-label">Email</span><span class="dp-field-val" style="color:var(--purple-light)">${p.email}</span></div>`:''}
+        ${p.address?`<div class="dp-field"><span class="dp-field-label">Address</span><span class="dp-field-val">${p.address}</span></div>`:''}
+        ${p.date?`<div class="dp-field"><span class="dp-field-label">Last Contact</span><span class="dp-field-val">${p.date}</span></div>`:''}
+      </div>
+      ${p.opp?`<div class="dp-section">
+        <div class="dp-section-title">Synapse Opportunity</div>
+        <div class="dp-opp">${p.opp}</div>
+      </div>`:''}
+      ${p.action?`<div class="dp-section">
+        <div class="dp-section-title">Next Action</div>
+        <div class="dp-action-box">→ ${p.action}</div>
+      </div>`:''}
+      ${p.notes?`<div class="dp-section">
+        <div class="dp-section-title">Notes</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">${p.notes}</div>
+      </div>`:''}
+      <div class="dp-section">
+        <div class="dp-section-title">Update Stage</div>
+        <div class="stage-selector">
+          ${STAGES.map(s=>{
+            const sst = STAGE_STYLE[s];
+            const sel = p.status===s;
+            const colors = {
+              'NOT CONTACTED':'#6B7280','AUDIT BOOKED':'#F59E0B',
+              'QUOTE ACCEPTED':'#3B82F6','TERMS ACCEPTED':'#10B981','LOST / DEAD':'#EF4444'
+            };
+            return `<div class="stage-opt ${sel?'sel':''}" 
+              style="background:${sel?colors[s]+'22':'transparent'};color:${colors[s]};border-color:${sel?colors[s]:sst.kc}"
+              onclick="updateStatus('${id}','${s}')">${s}</div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="dp-section">
+        <div class="dp-section-title">Activity Log</div>
+        ${(p.activities||[]).length===0?`<div style="font-size:13px;color:var(--text3)">No activity yet.</div>`:''}
+        ${(p.activities||[]).slice().reverse().map(a=>`
+          <div class="activity-item">
+            <div class="act-icon">${a.type==='call'?'📞':a.type==='note'?'📝':'✉️'}</div>
+            <div class="act-body"><div class="act-text">${a.text}</div><div class="act-date">${a.date}</div></div>
+          </div>`).join('')}
+        <div class="add-note-wrap">
+          <textarea id="note-input-${id}" placeholder="Log a call, note, or update..."></textarea>
+          <button class="btn-note" onclick="addNote('${id}')">Log</button>
+        </div>
+      </div>
+      <button class="dp-edit-btn" onclick="openModal('${id}')">✏️ Edit Prospect</button>
+      <button class="dp-del-btn" onclick="deleteProspect('${id}')">Delete Prospect</button>
+    </div>`;
+
+  panel.classList.add('open');
+}
+
+function closeDetail(){
+  selectedId = null;
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+function updateStatus(id, newStatus){
+  const p = prospects.find(x=>x.id===id);
+  if(!p) return;
+  const old = p.status;
+  p.status = newStatus;
+  if(!p.activities) p.activities = [];
+  p.activities.push({date:new Date().toLocaleDateString(),type:'note',text:`Stage updated: ${old} → ${newStatus}`});
+  save();
+  openDetail(id);
+  render();
+  showToast(`${p.name} moved to ${newStatus}`);
+}
+
+function addNote(id){
+  const inp = document.getElementById('note-input-'+id);
+  if(!inp||!inp.value.trim()) return;
+  const p = prospects.find(x=>x.id===id);
+  if(!p) return;
+  if(!p.activities) p.activities = [];
+  p.activities.push({date:new Date().toLocaleDateString(),type:'note',text:inp.value.trim()});
+  save();
+  openDetail(id);
+  showToast('Note logged');
+}
+
+function deleteProspect(id){
+  if(!confirm('Delete this prospect? This cannot be undone.')) return;
+  prospects = prospects.filter(x=>x.id!==id);
+  save();
+  closeDetail();
+  render();
+  showToast('Prospect deleted');
+}
+
+// ════════════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════════════
+function openModal(id=null){
+  editingId = id;
+  modalStatus = 'NOT CONTACTED';
+  const el = document.getElementById('modal-overlay');
+  document.getElementById('modal-title').textContent = id?'Edit Prospect':'Add New Prospect';
+  populateCatSelect();
+  if(id){
+    const p = prospects.find(x=>x.id===id);
+    if(p){
+      document.getElementById('m-name').value  = p.name||'';
+      populateCatSelect(p.cat||segments[0]?.name||'');
+      document.getElementById('m-addr').value  = p.address||'';
+      document.getElementById('m-phone').value = p.phone||'';
+      document.getElementById('m-email').value = p.email||'';
+      document.getElementById('m-owner').value = p.owner||'';
+      document.getElementById('m-date').value  = p.date||'';
+      document.getElementById('m-opp').value   = p.opp||'';
+      document.getElementById('m-action').value= p.action||'';
+      document.getElementById('m-notes').value = p.notes||'';
+      modalStatus = p.status||'NOT CONTACTED';
+    }
+  } else {
+    ['m-name','m-addr','m-phone','m-email','m-owner','m-date','m-opp','m-action','m-notes'].forEach(x=>document.getElementById(x).value='');
+    document.getElementById('m-cat').value='Restaurants';
+  }
+  document.querySelectorAll('.modal-stage-btn').forEach(b=>{
+    const s = b.getAttribute('onclick').match(/'([^']+)'\)/)[1];
+    b.classList.toggle('sel', s===modalStatus);
+  });
+  el.classList.add('open');
+}
+
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('open');
+  editingId = null;
+}
+
+function selectModalStage(btn, val){
+  modalStatus = val;
+  document.querySelectorAll('.modal-stage-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+function saveProspect(){
+  const name = document.getElementById('m-name').value.trim();
+  if(!name){ showToast('Business name is required'); return; }
+  if(editingId){
+    const p = prospects.find(x=>x.id===editingId);
+    if(p){
+      const old = p.status;
+      p.name    = name;
+      p.cat     = document.getElementById('m-cat').value;
+      p.status  = modalStatus;
+      p.address = document.getElementById('m-addr').value.trim();
+      p.phone   = document.getElementById('m-phone').value.trim();
+      p.email   = document.getElementById('m-email').value.trim();
+      p.owner   = document.getElementById('m-owner').value.trim();
+      p.date    = document.getElementById('m-date').value;
+      p.opp     = document.getElementById('m-opp').value.trim();
+      p.action  = document.getElementById('m-action').value.trim();
+      p.notes   = document.getElementById('m-notes').value.trim();
+      if(old!==modalStatus){
+        if(!p.activities) p.activities=[];
+        p.activities.push({date:new Date().toLocaleDateString(),type:'note',text:`Stage updated: ${old} → ${modalStatus}`});
+      }
+      save();
+      closeModal();
+      if(selectedId===editingId) openDetail(editingId);
+      render();
+      showToast('Prospect updated');
+    }
+  } else {
+    const p = {
+      id: genId(),
+      name, cat:document.getElementById('m-cat').value,
+      status:modalStatus,
+      address:document.getElementById('m-addr').value.trim(),
+      phone:document.getElementById('m-phone').value.trim(),
+      email:document.getElementById('m-email').value.trim(),
+      owner:document.getElementById('m-owner').value.trim(),
+      date:document.getElementById('m-date').value,
+      opp:document.getElementById('m-opp').value.trim(),
+      action:document.getElementById('m-action').value.trim(),
+      notes:document.getElementById('m-notes').value.trim(),
+      activities:[{date:new Date().toLocaleDateString(),type:'note',text:'Prospect added to pipeline.'}]
+    };
+    prospects.push(p);
+    save();
+    closeModal();
+    render();
+    showToast(`${name} added to pipeline`);
+  }
+}
+
+
+// ════════════════════════════════════════════════
+// SEGMENT MANAGEMENT
+// ════════════════════════════════════════════════
+function openSegmentModal(segId=null){
+  editingSegId = segId;
+  selectedEmoji = '📁';
+  selectedColor = '#2D7DD2';
+  document.getElementById('seg-modal-title').textContent = segId ? 'Edit Segment' : 'Add Segment';
+  document.getElementById('seg-name').value = '';
+
+  if(segId){
+    const seg = segments.find(s=>s.id===segId);
+    if(seg){
+      document.getElementById('seg-name').value = seg.name;
+      selectedEmoji = seg.icon;
+      selectedColor = seg.color;
+    }
+  }
+
+  // Build emoji grid
+  document.getElementById('emoji-grid').innerHTML = EMOJI_OPTS.map(e=>`
+    <div class="emoji-opt ${e===selectedEmoji?'sel':''}" onclick="selectEmoji(this,'${e}')">${e}</div>
+  `).join('');
+
+  // Build color grid
+  document.getElementById('color-grid').innerHTML = COLOR_OPTS.map(c=>`
+    <div class="color-opt ${c===selectedColor?'sel':''}"
+         style="background:${c}"
+         onclick="selectColor(this,'${c}')"></div>
+  `).join('');
+
+  document.getElementById('seg-modal-overlay').classList.add('open');
+}
+
+function closeSegmentModal(){
+  document.getElementById('seg-modal-overlay').classList.remove('open');
+  editingSegId = null;
+}
+
+function selectEmoji(el, val){
+  selectedEmoji = val;
+  document.querySelectorAll('.emoji-opt').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function selectColor(el, val){
+  selectedColor = val;
+  document.querySelectorAll('.color-opt').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function saveSegment(){
+  const name = document.getElementById('seg-name').value.trim();
+  if(!name){ showToast('Segment name is required'); return; }
+
+  if(editingSegId){
+    const seg = segments.find(s=>s.id===editingSegId);
+    if(seg){ seg.name=name; seg.icon=selectedEmoji; seg.color=selectedColor; }
+  } else {
+    if(segments.find(s=>s.name.toLowerCase()===name.toLowerCase())){
+      showToast('A segment with that name already exists'); return;
+    }
+    segments.push({
+      id:'seg'+Date.now(),
+      name, icon:selectedEmoji, color:selectedColor
+    });
+  }
+  saveSegments();
+  closeSegmentModal();
+  renderSegmentNav();
+  renderFilterBtns();
+  populateCatSelect();
+  render();
+  showToast(`Segment "${name}" ${editingSegId?'updated':'created'}`);
+}
+
+function confirmDeleteSegment(segId){
+  const seg = segments.find(s=>s.id===segId);
+  if(!seg) return;
+  const count = prospects.filter(p=>p.cat===seg.name).length;
+  const msg = count > 0
+    ? `Delete segment "${seg.name}"? ${count} prospect(s) in this segment will be moved to the first available segment.`
+    : `Delete segment "${seg.name}"?`;
+  if(!confirm(msg)) return;
+  if(count > 0){
+    const fallback = segments.find(s=>s.id!==segId)?.name || 'Uncategorised';
+    prospects.forEach(p=>{ if(p.cat===seg.name) p.cat=fallback; });
+    save();
+  }
+  segments = segments.filter(s=>s.id!==segId);
+  saveSegments();
+  if(activeFilter===seg.name) setFilter('all');
+  renderSegmentNav();
+  renderFilterBtns();
+  populateCatSelect();
+  render();
+  showToast(`Segment "${seg.name}" deleted`);
+}
+
+// ════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════
+const USERS = [
+  {username:'franco',  password:'FrancoSyn25',  display:'Franco Di Giovanni', initials:'FD', role:'Admin'},
+  {username:'michael', password:'MichaelSyn25', display:'Michael Mancuso',     initials:'MM', role:'Sales'},
+  {username:'jp',      password:'JPSyn25',      display:'JP Riquelme',          initials:'JP', role:'Sales'},
+];
+
+function attemptLogin(){
+  const u = document.getElementById('login-user').value.trim().toLowerCase();
+  const p = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-err');
+  const user = USERS.find(x=>x.username===u && x.password===p);
+  if(!user){
+    err.textContent = 'Incorrect username or password.';
+    document.getElementById('login-pass').value = '';
+    document.getElementById('login-pass').focus();
+    return;
+  }
+  sessionStorage.setItem('synapse_session', JSON.stringify(user));
+  bootCRM(user);
+}
+
+function bootCRM(user){
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('sb-avatar').textContent = user.initials;
+  document.getElementById('sb-uname').textContent = user.display;
+  loadData();
+  loadSegments();
+  renderSegmentNav();
+  populateCatSelect();
+  setFilter('all');
+  showView('dashboard');
+}
+
+function logout(){
+  if(!confirm('Sign out of Synapse CRM?')) return;
+  sessionStorage.removeItem('synapse_session');
+  location.reload();
+}
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+(function(){
+  const sess = sessionStorage.getItem('synapse_session');
+  if(sess){
+    try{ bootCRM(JSON.parse(sess)); return; }catch(e){}
+  }
+  // Show login screen — focus username field
+  document.getElementById('login-screen').style.display = 'flex';
+  setTimeout(()=>document.getElementById('login-user').focus(), 100);
+})();
+</script>
+</body>
+</html>
