@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Synapse CRM</title>
 <link href="https://fonts.googleapis.com/css2?family=Lexend+Giga:wght@400;500;600;700&family=Libre+Franklin:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -492,6 +493,14 @@ body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(
 
 <script>
 // ════════════════════════════════════════════════
+// SUPABASE CONFIG
+// ════════════════════════════════════════════════
+const SUPABASE_URL = 'https://alfzjwzeccqswtytcylo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsZnpqd3plY2Nxc3d0eXRjeWxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2ODg2OTYsImV4cCI6MjA5MTI2NDY5Nn0.wCaQinatrDl8-tqzyyDK8US6EhiawyxTfXsoUVhQ18o';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabaseReady = true; // flag to track if Supabase is reachable
+
+// ════════════════════════════════════════════════
 // DATA
 // ════════════════════════════════════════════════
 const DEFAULT_PROSPECTS = [
@@ -555,23 +564,110 @@ let selectedEmoji = '📁';
 let selectedColor = '#2D7DD2';
 let editingSegId = null;
 
-function loadData(){
+async function loadData(){
+  // Try Supabase first
+  try{
+    const { data, error } = await sb.from('prospects').select('*');
+    if(!error && data && data.length > 0){
+      prospects = data.map(p=>({
+        ...p,
+        activities: typeof p.activities === 'string' ? JSON.parse(p.activities) : (p.activities || [])
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(prospects));
+      console.log('[Supabase] Loaded '+prospects.length+' prospects from database');
+      return;
+    }
+  }catch(e){ console.warn('[Supabase] Load failed, using localStorage', e); supabaseReady = false; }
+  // Fallback to localStorage
   try{
     const saved = localStorage.getItem(STORAGE_KEY);
     if(saved){ prospects = JSON.parse(saved); }
-    else { prospects = DEFAULT_PROSPECTS; save(); }
+    else { prospects = DEFAULT_PROSPECTS; }
   }catch(e){ prospects = DEFAULT_PROSPECTS; }
+  // If Supabase had zero rows but is reachable, migrate localStorage data up
+  if(supabaseReady && prospects.length > 0){
+    console.log('[Supabase] Migrating '+prospects.length+' prospects to database...');
+    await syncAllProspects();
+  }
 }
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(prospects)); }
+
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(prospects));
+  syncAllProspects(); // fire-and-forget background sync
+}
+
 function genId(){ return 'p'+Date.now()+Math.random().toString(36).slice(2,6); }
 
-function loadSegments(){
+// ── Supabase sync helpers ──
+async function syncAllProspects(){
+  if(!supabaseReady) return;
+  try{
+    const rows = prospects.map(p=>({
+      id: p.id, name: p.name, cat: p.cat, status: p.status,
+      address: p.address||'', phone: p.phone||'', email: p.email||'',
+      owner: p.owner||'', date: p.date||'', opp: p.opp||'',
+      action: p.action||'', notes: p.notes||'',
+      activities: p.activities||[],
+      updated_at: new Date().toISOString()
+    }));
+    const { error } = await sb.from('prospects').upsert(rows, { onConflict: 'id' });
+    if(error) console.warn('[Supabase] Prospect sync error:', error);
+    else console.log('[Supabase] Synced '+rows.length+' prospects');
+  }catch(e){ console.warn('[Supabase] Sync failed:', e); }
+}
+
+async function deleteProspectFromSupabase(id){
+  if(!supabaseReady) return;
+  try{
+    await sb.from('prospects').delete().eq('id', id);
+  }catch(e){ console.warn('[Supabase] Delete failed:', e); }
+}
+
+async function loadSegments(){
+  // Try Supabase first
+  try{
+    const { data, error } = await sb.from('segments').select('*');
+    if(!error && data && data.length > 0){
+      segments = data;
+      localStorage.setItem(SEG_KEY, JSON.stringify(segments));
+      console.log('[Supabase] Loaded '+segments.length+' segments from database');
+      return;
+    }
+  }catch(e){ console.warn('[Supabase] Segment load failed', e); }
+  // Fallback to localStorage
   try{
     const saved = localStorage.getItem(SEG_KEY);
     segments = saved ? JSON.parse(saved) : DEFAULT_SEGMENTS;
   }catch(e){ segments = DEFAULT_SEGMENTS; }
+  // Migrate segments to Supabase if needed
+  if(supabaseReady && segments.length > 0){
+    console.log('[Supabase] Migrating segments to database...');
+    await syncAllSegments();
+  }
 }
-function saveSegments(){ localStorage.setItem(SEG_KEY, JSON.stringify(segments)); }
+
+function saveSegments(){
+  localStorage.setItem(SEG_KEY, JSON.stringify(segments));
+  syncAllSegments(); // fire-and-forget
+}
+
+async function syncAllSegments(){
+  if(!supabaseReady) return;
+  try{
+    const rows = segments.map(s=>({
+      id: s.id, name: s.name, icon: s.icon||'📁', color: s.color||'#2D7DD2'
+    }));
+    const { error } = await sb.from('segments').upsert(rows, { onConflict: 'id' });
+    if(error) console.warn('[Supabase] Segment sync error:', error);
+  }catch(e){ console.warn('[Supabase] Segment sync failed:', e); }
+}
+
+async function deleteSegmentFromSupabase(id){
+  if(!supabaseReady) return;
+  try{
+    await sb.from('segments').delete().eq('id', id);
+  }catch(e){ console.warn('[Supabase] Segment delete failed:', e); }
+}
 
 function getSegIcon(cat){ return (segments.find(s=>s.name===cat)||{icon:'◆'}).icon; }
 function getSegColor(cat){ return (segments.find(s=>s.name===cat)||{color:'#6B7280'}).color; }
@@ -1205,6 +1301,7 @@ function deleteProspect(id){
   if(!confirm('Delete this prospect? This cannot be undone.')) return;
   prospects = prospects.filter(x=>x.id!==id);
   save();
+  deleteProspectFromSupabase(id); // also remove from Supabase
   closeDetail();
   render();
   showToast('Prospect deleted');
@@ -1399,6 +1496,7 @@ function confirmDeleteSegment(segId){
   }
   segments = segments.filter(s=>s.id!==segId);
   saveSegments();
+  deleteSegmentFromSupabase(segId); // also remove from Supabase
   if(activeFilter===seg.name) setFilter('all');
   renderSegmentNav();
   renderFilterBtns();
@@ -1426,7 +1524,7 @@ const USERS = [
   {username:'jp',      password:'JPSyn25',      display:'JP Riquelme',          initials:'JP', role:'Sales'},
 ];
 
-function attemptLogin(){
+async function attemptLogin(){
   const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value;
   const err = document.getElementById('login-err');
@@ -1438,15 +1536,15 @@ function attemptLogin(){
     return;
   }
   sessionStorage.setItem('synapse_session', JSON.stringify(user));
-  bootCRM(user);
+  await bootCRM(user);
 }
 
-function bootCRM(user){
+async function bootCRM(user){
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('sb-avatar').textContent = user.initials;
   document.getElementById('sb-uname').textContent = user.display;
-  loadData();
-  loadSegments();
+  await loadData();
+  await loadSegments();
   renderSegmentNav();
   populateCatSelect();
   setFilter('all');
@@ -1462,10 +1560,10 @@ function logout(){
 // ════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════
-(function(){
+(async function(){
   const sess = sessionStorage.getItem('synapse_session');
   if(sess){
-    try{ bootCRM(JSON.parse(sess)); return; }catch(e){}
+    try{ await bootCRM(JSON.parse(sess)); return; }catch(e){}
   }
   // Show login screen — focus username field
   document.getElementById('login-screen').style.display = 'flex';
