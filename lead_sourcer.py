@@ -1065,20 +1065,24 @@ def build_prospect(raw, vertical, area):
     city = area.split(",")[0].strip()
     slug = slugify(f"{raw['name']}-{city}")
 
+    now = datetime.now(timezone.utc).isoformat()
     return {
         "id": slug,
         "name": raw["name"][:100],
         "cat": vertical,
-        "stage": "Not Contacted",
+        "status": "NOT CONTACTED",
         "address": raw.get("address", "")[:200] or area,
         "phone": raw.get("phone", ""),
         "email": raw.get("email", ""),
         "owner": raw.get("owner", ""),
-        "opportunity": _ai_gap_for_vertical(vertical, area),
-        "next_action": "Research & qualify",
+        "opp": _ai_gap_for_vertical(vertical, area),
+        "action": "Research & qualify",
         "notes": f"[Auto-sourced {datetime.now().strftime('%Y-%m-%d')} via {source}] {raw.get('snippet', '')[:120]}",
-        "source": source,
         "last_contact": None,
+        "date": None,
+        "activities": json.dumps([]),
+        "created_at": now,
+        "updated_at": now,
     }
 
 
@@ -1308,32 +1312,27 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
         print(f"\n  Total inserted: {inserted}/{len(all_leads)}")
 
     # Step 5: ALWAYS notify Franco via SMS (even if 0 new leads)
-    source_summary = circuit_breaker.summary()
-
     if inserted > 0:
         msg = (
             f"Unify: {inserted} new leads added! "
             f"({breakdown}). "
             f"Searched {searches_done} combos. "
             f"Skipped: {skipped_no_name} no-name, {skipped_duplicate} dupes. "
-            f"Sources: {source_summary}. "
             f"Review: synapse-crm-coral.vercel.app"
         )
     elif all_leads and not dry_run:
         msg = (
             f"Unify: {len(all_leads)} leads found but insert failed. "
             f"Searched {searches_done} combos. "
-            f"Sources: {source_summary}. "
             f"Check GitHub Actions logs."
         )
     elif dry_run:
         msg = None  # Don't SMS on dry run
     else:
         msg = (
-            f"Unify: Lead sourcer ran — 0 new leads. "
+            f"Unify: Lead sourcer ran - 0 new leads. "
             f"Searched {searches_done} combos. "
             f"Skipped: {skipped_no_name} no-name, {skipped_duplicate} dupes. "
-            f"Sources: {source_summary}. "
             f"Next run may yield different results."
         )
 
