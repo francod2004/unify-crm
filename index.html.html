@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Synapse CRM</title>
-<link href="https://fonts.googleapis.com/css2?family=Lexend+Giga:wght@400;500;600;700&family=Libre+Franklin:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Unify CRM</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend+Giga:wght@400;500;600;700&family=Libre+Franklin:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Codec+Pro:wght@400;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -327,14 +327,14 @@ body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(
   <div class="login-card">
     <div class="login-logo-wrap">
       <div class="login-mark">
-        <svg width="28" height="32" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg">
-          <polygon points="2,2 78,2 78,50 44,50 44,30 2,30" fill="#FFFFFF"/>
-          <polygon points="78,88 2,88 2,40 36,40 36,60 78,60" fill="#FFFFFF"/>
+        <svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,70 L10,30 Q10,20 20,20 L50,20 L50,30 L20,30 L20,60 L50,60 L50,50 L30,50 L30,40" stroke="#FFFFFF" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M90,30 L90,70 Q90,80 80,80 L50,80 L50,70 L80,70 L80,40 L50,40 L50,50 L70,50 L70,60" stroke="#FFFFFF" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
       <div class="login-brand">
-        <div class="login-brand-name">SYNAPSE</div>
-        <div class="login-brand-sub">AI Automization</div>
+        <div class="login-brand-name">UNIFY</div>
+        <div class="login-brand-sub">AI AUTOMATION</div>
       </div>
     </div>
     <div class="login-title">Welcome back</div>
@@ -349,7 +349,7 @@ body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(
     </div>
     <button class="login-btn" onclick="attemptLogin()">Sign In</button>
     <div class="login-err" id="login-err"></div>
-    <div class="login-footer">Synapse CRM — GTA Pipeline · Private Access Only</div>
+    <div class="login-footer">Unify CRM — GTA Pipeline · Private Access Only</div>
   </div>
 </div>
 
@@ -359,14 +359,14 @@ body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(
   <div class="sb-logo">
     <div class="sb-logo-inner">
       <div class="sb-mark">
-        <svg width="22" height="25" viewBox="0 0 80 90" xmlns="http://www.w3.org/2000/svg">
-          <polygon points="2,2 78,2 78,50 44,50 44,30 2,30" fill="#FFFFFF"/>
-          <polygon points="78,88 2,88 2,40 36,40 36,60 78,60" fill="#FFFFFF"/>
+        <svg width="26" height="26" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,70 L10,30 Q10,20 20,20 L50,20 L50,30 L20,30 L20,60 L50,60 L50,50 L30,50 L30,40" stroke="#FFFFFF" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M90,30 L90,70 Q90,80 80,80 L50,80 L50,70 L80,70 L80,40 L50,40 L50,50 L70,50 L70,60" stroke="#FFFFFF" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
       <div>
-        <div class="sb-name">SYNAPSE</div>
-        <div class="sb-sub">AI AUTOMIZATION</div>
+        <div class="sb-name">UNIFY</div>
+        <div class="sb-sub">AI AUTOMATION</div>
       </div>
     </div>
   </div>
@@ -397,7 +397,7 @@ body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(
       <div class="sb-avatar" id="sb-avatar">??</div>
       <div>
         <div class="sb-uname" id="sb-uname">—</div>
-        <div class="sb-role">Synapse — Caledon, ON</div>
+        <div class="sb-role">Unify — Caledon, ON</div>
       </div>
     </div>
     <button class="btn-add" style="margin-top:10px" onclick="openModal()">+ Add Prospect</button>
@@ -441,7 +441,7 @@ body::before{content:'';position:fixed;top:-100px;left:50%;transform:translateX(
       <div class="modal-field"><label>Email</label><input id="m-email" type="text" placeholder="owner@business.com"></div>
       <div class="modal-field"><label>Owner / Contact Name</label><input id="m-owner" type="text" placeholder="First name"></div>
       <div class="modal-field"><label>Last Contact Date</label><input id="m-date" type="date"></div>
-      <div class="modal-field full"><label>Synapse Opportunity</label><textarea id="m-opp" placeholder="What automation gap does this business have?"></textarea></div>
+      <div class="modal-field full"><label>Unify Opportunity</label><textarea id="m-opp" placeholder="What automation gap does this business have?"></textarea></div>
       <div class="modal-field full"><label>Next Action</label><input id="m-action" type="text" placeholder="e.g. Send proposal by Friday"></div>
       <div class="modal-field full"><label>Notes</label><textarea id="m-notes" placeholder="Context from call, visit, or research..."></textarea></div>
       <div class="modal-field full">
@@ -534,14 +534,14 @@ const DEFAULT_PROSPECTS = [
   {id:'h11',name:'Handyman in Mississauga',cat:'Trades',status:'NOT CONTACTED',address:'1103 Mesa Crescent, Mississauga, ON',phone:'+1 647-624-7843',email:'',owner:'Ayaz',opp:'Small reno team. Post-job review automation + referral follow-up workflow.',action:'Cold call — ask for Ayaz or Masum',notes:'12 reviews. New but strong.',activities:[]},
   {id:'h12',name:'Lion of Construction & Landscaping',cat:'Trades',status:'NOT CONTACTED',address:'656 Eversley Dr, Mississauga, ON',phone:'+1 437-988-8822',email:'',owner:'Unknown',opp:'Seasonal business (snow/landscaping). Seasonal campaign automation + booking AI.',action:'Cold call — pitch seasonal automation use case',notes:'87 reviews, 5 stars.',activities:[]},
   // 4MenUnited (active audit)
-  {id:'a1',name:'4MenUnited',cat:'Retail',status:'AUDIT BOOKED',address:'Greater Toronto Area',phone:'',email:'',owner:'Owner',opp:"Men's boutique retail — full AI stack: clienteling, inventory insights, booking, follow-up CRM. Jesta IS reference point from Harry Rosen conversation.",action:'Prepare audit presentation — Jesta vs Synapse positioning',notes:"First booked audit. Owner mentioned Harry Rosen's Jesta IS system. Audit secured via cold call.",activities:[{date:new Date().toLocaleDateString(),type:'call',text:'Secured free consultation via cold call. Owner mentioned Harry Rosen Jesta IS reference.'}]}
+  {id:'a1',name:'4MenUnited',cat:'Retail',status:'AUDIT BOOKED',address:'Greater Toronto Area',phone:'',email:'',owner:'Owner',opp:"Men's boutique retail — full AI stack: clienteling, inventory insights, booking, follow-up CRM. Jesta IS reference point from Harry Rosen conversation.",action:'Prepare audit presentation — Jesta vs Unify positioning',notes:"First booked audit. Owner mentioned Harry Rosen's Jesta IS system. Audit secured via cold call.",activities:[{date:new Date().toLocaleDateString(),type:'call',text:'Secured free consultation via cold call. Owner mentioned Harry Rosen Jesta IS reference.'}]}
 ];
 
 // ════════════════════════════════════════════════
 // STATE
 // ════════════════════════════════════════════════
-const STORAGE_KEY = 'synapse_crm_v1';
-const SEG_KEY = 'synapse_segments_v1';
+const STORAGE_KEY = 'unify_crm_v1';
+const SEG_KEY = 'unify_segments_v1';
 
 const DEFAULT_SEGMENTS = [
   {id:'restaurants', name:'Restaurants', icon:'🍽', color:'#EF4444'},
@@ -838,7 +838,7 @@ function renderDashboard(){
           <div class="dash-card-title">Active Audit</div>
           <div style="background:var(--yellow-bg);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px;font-size:13px;color:#FCD34D;line-height:1.6">
             <strong>4MenUnited</strong> — Audit secured via cold call.<br>
-            <span style="color:var(--text3);font-size:12px">Prepare Jesta IS vs Synapse positioning before the consultation.</span>
+            <span style="color:var(--text3);font-size:12px">Prepare Jesta IS vs Unify positioning before the consultation.</span>
           </div>
         </div>
       </div>
@@ -1220,7 +1220,7 @@ function openDetail(id){
         ${p.date?`<div class="dp-field"><span class="dp-field-label">Last Contact</span><span class="dp-field-val">${p.date}</span></div>`:''}
       </div>
       ${p.opp?`<div class="dp-section">
-        <div class="dp-section-title">Synapse Opportunity</div>
+        <div class="dp-section-title">Unify Opportunity</div>
         <div class="dp-opp">${p.opp}</div>
       </div>`:''}
       ${p.action?`<div class="dp-section">
@@ -1535,7 +1535,7 @@ async function attemptLogin(){
     document.getElementById('login-pass').focus();
     return;
   }
-  sessionStorage.setItem('synapse_session', JSON.stringify(user));
+  sessionStorage.setItem('unify_session', JSON.stringify(user));
   await bootCRM(user);
 }
 
@@ -1552,8 +1552,8 @@ async function bootCRM(user){
 }
 
 function logout(){
-  if(!confirm('Sign out of Synapse CRM?')) return;
-  sessionStorage.removeItem('synapse_session');
+  if(!confirm('Sign out of Unify CRM?')) return;
+  sessionStorage.removeItem('unify_session');
   location.reload();
 }
 
@@ -1561,7 +1561,7 @@ function logout(){
 // INIT
 // ════════════════════════════════════════════════
 (async function(){
-  const sess = sessionStorage.getItem('synapse_session');
+  const sess = sessionStorage.getItem('unify_session');
   if(sess){
     try{ await bootCRM(JSON.parse(sess)); return; }catch(e){}
   }
