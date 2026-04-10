@@ -7,7 +7,7 @@ Multi-source lead sourcing across the GTA. Scrapes:
   - Google Maps (via Google Places text search)
   - Yelp.ca
   - Bing Places
-  - BBB (Better Business Bureau)h
+  - BBB (Better Business Bureau)
   - 411.ca
 
 Enriches leads from business websites, filters out chains/franchises,
@@ -57,25 +57,78 @@ FRANCO_PHONE  = os.getenv("FRANCO_PHONE", "")   # Franco's cell
 VERTICALS = {
     "Restaurants": [
         "restaurant", "cafe", "bakery", "pizzeria", "sushi restaurant",
-        "bar and grill", "catering", "food truck", "diner", "bistro"
+        "bar and grill", "catering", "food truck", "diner", "bistro",
+        "brunch spot", "steakhouse", "thai restaurant", "indian restaurant",
+        "italian restaurant", "mexican restaurant", "bbq restaurant",
     ],
     "Retail": [
         "boutique", "clothing store", "gift shop", "jewelry store",
-        "pet store", "florist", "furniture store", "shoe store"
+        "pet store", "florist", "furniture store", "shoe store",
+        "home decor store", "sporting goods store", "vintage shop",
+        "bridal shop", "optical store", "luggage store",
     ],
     "Trades": [
         "plumber", "electrician", "HVAC contractor", "roofing contractor",
         "landscaping company", "painting contractor", "general contractor",
-        "handyman service", "fence installer", "garage door repair"
+        "handyman service", "fence installer", "garage door repair",
+        "pest control", "tree service", "pool company", "paving contractor",
+        "foundation repair", "waterproofing company", "septic service",
+    ],
+    "Dental & Medical": [
+        "dentist", "dental clinic", "chiropractor", "physiotherapy clinic",
+        "optometrist", "veterinary clinic", "walk-in clinic",
+        "dermatologist", "orthodontist", "massage therapy clinic",
+    ],
+    "Salons & Spas": [
+        "hair salon", "barbershop", "nail salon", "med spa",
+        "beauty salon", "tanning salon", "day spa", "waxing studio",
+        "lash studio", "tattoo shop",
+    ],
+    "Professional Services": [
+        "law firm", "accounting firm", "insurance agency",
+        "real estate agency", "mortgage broker", "financial advisor",
+        "tax preparation", "notary public", "immigration consultant",
+    ],
+    "Fitness & Wellness": [
+        "gym", "fitness studio", "yoga studio", "pilates studio",
+        "crossfit gym", "martial arts studio", "personal training",
+        "dance studio", "swimming school",
+    ],
+    "Auto Services": [
+        "auto repair shop", "car detailing", "tire shop",
+        "auto body shop", "oil change", "car wash",
+        "transmission repair", "muffler shop",
+    ],
+    "Cleaning & Property": [
+        "cleaning company", "janitorial service", "carpet cleaning",
+        "window cleaning company", "property management company",
+        "moving company", "junk removal", "storage facility",
     ],
 }
 
 GTA_AREAS = [
-    "Toronto, ON", "Brampton, ON", "Mississauga, ON", "Vaughan, ON",
-    "Markham, ON", "Richmond Hill, ON", "Oakville, ON", "Burlington, ON",
-    "Caledon, ON", "Bolton, ON", "Ajax, ON", "Pickering, ON",
-    "Oshawa, ON", "Newmarket, ON", "Aurora, ON", "Milton, ON",
-    "Georgetown, ON", "Scarborough, ON", "Etobicoke, ON", "North York, ON",
+    # Core Toronto
+    "Toronto, ON", "Scarborough, ON", "Etobicoke, ON", "North York, ON",
+    # Peel Region
+    "Brampton, ON", "Mississauga, ON", "Caledon, ON", "Bolton, ON",
+    # York Region
+    "Vaughan, ON", "Markham, ON", "Richmond Hill, ON",
+    "Newmarket, ON", "Aurora, ON", "Stouffville, ON", "King City, ON",
+    # Halton Region
+    "Oakville, ON", "Burlington, ON", "Milton, ON", "Georgetown, ON",
+    "Halton Hills, ON", "Acton, ON",
+    # Durham Region
+    "Ajax, ON", "Pickering, ON", "Oshawa, ON", "Whitby, ON",
+    "Clarington, ON", "Bowmanville, ON", "Uxbridge, ON",
+    # ~80km radius expansions
+    "Hamilton, ON", "Stoney Creek, ON", "Ancaster, ON", "Dundas, ON",
+    "Grimsby, ON", "St. Catharines, ON", "Niagara Falls, ON",
+    "Welland, ON", "Niagara-on-the-Lake, ON",
+    "Guelph, ON", "Kitchener, ON", "Waterloo, ON", "Cambridge, ON",
+    "Barrie, ON", "Innisfil, ON", "Orillia, ON", "Alliston, ON",
+    "Orangeville, ON", "Shelburne, ON",
+    "Cobourg, ON", "Port Hope, ON", "Peterborough, ON",
+    "Brantford, ON", "Woodstock, ON", "Simcoe, ON",
 ]
 
 HEADERS = {
@@ -122,6 +175,25 @@ CHAIN_KEYWORDS = {
     "mr. rooter", "mr rooter", "roto-rooter", "roto rooter",
     "mr. electric", "mr electric", "molly maid", "merry maids",
     "servpro", "servicemaster", "home instead",
+    # Dental / medical chains
+    "dentalcorp", "123 dentist", "appletree medical",
+    # Salon / spa chains
+    "great clips", "supercuts", "first choice haircutters",
+    "sport clips", "fantastic sams", "mastercuts",
+    # Fitness chains
+    "goodlife fitness", "planet fitness", "anytime fitness",
+    "la fitness", "fit4less", "orangetheory", "f45 training",
+    "curves", "snap fitness",
+    # Auto chains
+    "mr. lube", "mr lube", "jiffy lube", "midas", "meineke",
+    "speedy auto", "canadian tire auto", "kal tire",
+    # Cleaning chains
+    "servicemaster clean", "jan-pro", "coverall", "openworks",
+    # Insurance / finance chains
+    "state farm", "desjardins", "intact insurance",
+    "allstate", "sun life", "manulife",
+    "remax", "re/max", "royal lepage", "century 21", "keller williams",
+    "coldwell banker", "sutton group",
     # Banks / insurance / corporate
     "td bank", "rbc", "bmo", "scotiabank", "cibc",
 }
@@ -147,7 +219,9 @@ def clean_business_name(name):
     """Clean up scraped business name."""
     name = re.sub(r'^\d+', '', name).strip()
     name = re.sub(
-        r'\s*-\s*(Toronto|Brampton|Mississauga|Vaughan|Markham|Scarborough|Etobicoke|North York)\s*$',
+        r'\s*-\s*(Toronto|Brampton|Mississauga|Vaughan|Markham|Scarborough|Etobicoke|North York'
+        r'|Hamilton|Barrie|Guelph|Kitchener|Waterloo|Cambridge|Oshawa|Burlington|Oakville'
+        r'|St\.? Catharines|Niagara Falls|Peterborough|Brantford|Whitby|Ajax|Pickering)\s*$',
         '', name, flags=re.I
     )
     return name.strip()
@@ -211,9 +285,15 @@ def send_sms(body):
 # ==============================================================================
 
 YP_SEARCH_TERMS = {
-    "Restaurants": ["Restaurants", "Cafes", "Bakeries", "Pizza", "Catering"],
-    "Retail": ["Boutiques", "Clothing+Stores", "Gift+Shops", "Pet+Stores", "Florists"],
-    "Trades": ["Plumbers", "Electricians", "HVAC", "Roofing", "Landscaping", "Painters"],
+    "Restaurants": ["Restaurants", "Cafes", "Bakeries", "Pizza", "Catering", "Steakhouse", "Brunch"],
+    "Retail": ["Boutiques", "Clothing+Stores", "Gift+Shops", "Pet+Stores", "Florists", "Furniture+Store"],
+    "Trades": ["Plumbers", "Electricians", "HVAC", "Roofing", "Landscaping", "Painters", "Pest+Control"],
+    "Dental & Medical": ["Dentists", "Dental+Clinic", "Chiropractors", "Physiotherapy", "Veterinarians", "Optometrists"],
+    "Salons & Spas": ["Hair+Salons", "Barbershops", "Nail+Salons", "Day+Spas", "Beauty+Salons", "Med+Spa"],
+    "Professional Services": ["Law+Firms", "Accounting+Firms", "Insurance+Agency", "Real+Estate+Agency", "Mortgage+Broker"],
+    "Fitness & Wellness": ["Gyms", "Fitness+Studio", "Yoga+Studio", "Martial+Arts", "Dance+Studio", "Personal+Training"],
+    "Auto Services": ["Auto+Repair", "Car+Detailing", "Tire+Shop", "Auto+Body+Shop", "Car+Wash"],
+    "Cleaning & Property": ["Cleaning+Company", "Janitorial+Services", "Property+Management", "Moving+Company", "Junk+Removal"],
 }
 
 def scrape_yellowpages(search_term, area, max_results=10):
@@ -862,6 +942,24 @@ def enrich_from_website(url):
 
 # -- Prospect Builder ---------------------------------------------------------
 
+AI_GAPS_BY_VERTICAL = {
+    "Restaurants": "AI booking, review response, menu optimization, inventory forecasting",
+    "Retail": "AI inventory mgmt, customer chatbot, personalized marketing, POS analytics",
+    "Trades": "AI scheduling & dispatch, automated quoting, review mgmt, lead follow-up",
+    "Dental & Medical": "AI appointment booking, patient reminders, intake forms, review mgmt",
+    "Salons & Spas": "AI online booking, no-show prediction, client retention, social media",
+    "Professional Services": "AI client intake, document automation, scheduling, follow-up emails",
+    "Fitness & Wellness": "AI class scheduling, member retention, billing automation, lead nurture",
+    "Auto Services": "AI appointment booking, parts inventory, customer follow-up, estimates",
+    "Cleaning & Property": "AI scheduling & routing, quoting, customer portal, invoice automation",
+}
+
+def _ai_gap_for_vertical(vertical, area):
+    """Generate a specific AI gap description based on the vertical."""
+    gaps = AI_GAPS_BY_VERTICAL.get(vertical, "AI automation opportunity")
+    city = area.split(",")[0]
+    return f"AI automation opportunity â {vertical.lower()} in {city}. Gaps: {gaps}"
+
 def build_prospect(raw, vertical, area):
     """Convert raw scraped data into a CRM prospect record."""
     now = datetime.now(timezone.utc).isoformat()
@@ -875,7 +973,7 @@ def build_prospect(raw, vertical, area):
         "phone": raw.get("phone", ""),
         "email": raw.get("email", ""),
         "owner": raw.get("owner", ""),
-        "opp": f"AI automation opportunity -- {vertical.lower()} in {area.split(',')[0]}",
+        "opp": _ai_gap_for_vertical(vertical, area),
         "action": "Research & qualify",
         "notes": f"[Auto-sourced {datetime.now().strftime('%Y-%m-%d')} via {source}] {raw.get('snippet', '')[:120]}",
         "last_contact": None,
@@ -1051,7 +1149,7 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
         email_flag = "E" if p["email"] else " "
         phone_flag = "P" if p["phone"] else " "
         owner_flag = "O" if p["owner"] else " "
-        print(f"   {i:>2}. [{email_flag}{phone_flag}{owner_flag}] {p['name'][:35]:<35} | {p['cat']:<12} | {p['owner'][:20]}")
+        print(f"   {i:>2}. [{email_flag}{phone_flag}{owner_flag}] {p['name'][:35]:<35} | {p['cat']:<22} | {p['owner'][:20]}")
     if len(all_leads) > 15:
         print(f"   ... and {len(all_leads) - 15} more")
 
@@ -1096,7 +1194,7 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
         )
     else:
         msg = (
-            f"Caliber: Lead sourcer ran \u2014 {len(all_leads)} leads found but "
+            f"Caliber: Lead sourcer ran â {len(all_leads)} leads found but "
             f"all were duplicates (already in CRM). "
             f"No new additions. Next run may use different search terms."
         )
