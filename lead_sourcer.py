@@ -1191,6 +1191,7 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
     skipped_no_name = 0
     skipped_duplicate = 0
     skipped_chain = 0
+    saved_no_name = 0
 
     for v_name in verticals:
         # Smart area selection
@@ -1236,13 +1237,24 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
                         raw["phone"] = raw.get("phone") or extra["phone"]
                         raw["owner"] = raw.get("owner") or extra["owner"]
 
-                    # FILTER: Skip leads with no owner/contact name
-                    if not raw.get("owner", "").strip():
-                        print(f"   SKIP (no contact name): {raw['name']}")
+                    # FILTER: Owner name required UNLESS lead has BOTH email AND phone
+                    has_owner = bool(raw.get("owner", "").strip())
+                    has_email = bool(raw.get("email", "").strip())
+                    has_phone = bool(raw.get("phone", "").strip())
+
+                    if not has_owner and not (has_email and has_phone):
+                        print(f"   SKIP (no name + missing email or phone): {raw['name']}")
                         skipped_no_name += 1
                         continue
 
                     prospect = build_prospect(raw, v_name, area)
+
+                    # Flag no-name leads for enrichment by cold email agent
+                    if not has_owner:
+                        prospect["action"] = "Find owner name (has email+phone)"
+                        saved_no_name += 1
+                        print(f"   SAVED (no name, has email+phone): {raw['name']}")
+
                     all_leads.append(prospect)
                     existing.add(norm_name)
 
@@ -1263,6 +1275,8 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
     print(f"  {'='*56}")
     print(f"     Searches run       : {searches_done}")
     print(f"     Total leads found  : {len(all_leads)}")
+    print(f"     With owner name    : {len(all_leads) - saved_no_name}")
+    print(f"     No name (email+ph) : {saved_no_name}")
     print(f"     Skipped (no name)  : {skipped_no_name}")
     print(f"     Skipped (duplicate): {skipped_duplicate}")
     print(f"     Source performance : {circuit_breaker.summary()}")
@@ -1312,18 +1326,18 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
         print(f"\n  Total inserted: {inserted}/{len(all_leads)}")
 
     # Step 5: ALWAYS notify Franco via SMS (even if 0 new leads)
+    named = inserted - saved_no_name if inserted > saved_no_name else 0
     if inserted > 0:
         msg = (
             f"Unify: {inserted} new leads added! "
+            f"{named} with owner name, {saved_no_name} need name enrichment. "
             f"({breakdown}). "
-            f"Searched {searches_done} combos. "
-            f"Skipped: {skipped_no_name} no-name, {skipped_duplicate} dupes. "
+            f"Skipped: {skipped_no_name} no-info, {skipped_duplicate} dupes. "
             f"Review: synapse-crm-coral.vercel.app"
         )
     elif all_leads and not dry_run:
         msg = (
             f"Unify: {len(all_leads)} leads found but insert failed. "
-            f"Searched {searches_done} combos. "
             f"Check GitHub Actions logs."
         )
     elif dry_run:
@@ -1331,8 +1345,7 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
     else:
         msg = (
             f"Unify: Lead sourcer ran - 0 new leads. "
-            f"Searched {searches_done} combos. "
-            f"Skipped: {skipped_no_name} no-name, {skipped_duplicate} dupes. "
+            f"Skipped: {skipped_no_name} no-info, {skipped_duplicate} dupes. "
             f"Next run may yield different results."
         )
 
