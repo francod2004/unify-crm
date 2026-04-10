@@ -1258,7 +1258,17 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
                     all_leads.append(prospect)
                     existing.add(norm_name)
 
+                    # Daily cap: stop sourcing once we hit 20 leads
+                    if len(all_leads) >= 20:
+                        print(f"\n   DAILY CAP REACHED: {len(all_leads)} leads")
+                        break
+
                 searches_done += 1
+
+                # Break out of area loop if cap reached
+                if len(all_leads) >= 20:
+                    break
+
                 # Rate limit between search combos (increased from 2-4s)
                 delay = random.uniform(3.0, 6.0)
                 print(f"   Waiting {delay:.1f}s...\n")
@@ -1268,6 +1278,14 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
                 if not circuit_breaker.is_disabled("Google"):
                     google_delay = random.uniform(3.0, 5.0)
                     time.sleep(google_delay)
+
+            # Break out of search term loop if cap reached
+            if len(all_leads) >= 20:
+                break
+
+        # Break out of vertical loop if cap reached
+        if len(all_leads) >= 20:
+            break
 
     # Step 3: Summary
     print("\n" + "=" * 60)
