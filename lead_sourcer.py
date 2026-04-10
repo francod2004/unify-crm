@@ -7,7 +7,7 @@ Multi-source lead sourcing across the GTA. Scrapes:
   - Google Maps (via Google Places text search)
   - Yelp.ca
   - Bing Places
-  - BBB (Better Business Bureau)
+  - BBB (Better Business Bureau)h
   - 411.ca
 
 Enriches leads from business websites, filters out chains/franchises,
@@ -1082,20 +1082,26 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
 
     print(f"\n  Total inserted: {inserted}/{len(all_leads)}")
 
-    # Step 5: Notify Franco
-    if inserted > 0:
-        cats = {}
-        for p in all_leads:
-            cats[p["cat"]] = cats.get(p["cat"], 0) + 1
-        breakdown = ", ".join(f"{v} {k}" for k, v in cats.items())
+    # Step 5: Notify Franco (always send summary, even if 0 new)
+    cats = {}
+    for p in all_leads:
+        cats[p["cat"]] = cats.get(p["cat"], 0) + 1
+    breakdown = ", ".join(f"{v} {k}" for k, v in cats.items())
 
+    if inserted > 0:
         msg = (
             f"Caliber: {inserted} new leads added ({breakdown}). "
             f"Sources: YP/Google/Yelp/Bing/BBB/411. "
             f"Review: synapse-crm-coral.vercel.app"
         )
-        print(f"\n  Notifying Franco...")
-        send_sms(msg)
+    else:
+        msg = (
+            f"Caliber: Lead sourcer ran \u2014 {len(all_leads)} leads found but "
+            f"all were duplicates (already in CRM). "
+            f"No new additions. Next run may use different search terms."
+        )
+    print(f"\n  Notifying Franco...")
+    send_sms(msg)
 
     print("\n  Agent run complete.")
 
