@@ -1,0 +1,40 @@
+name: Unify Cold Email Agent
+
+on:
+  schedule:
+    - cron: '0 15 * * *'  # 11 AM EDT (1 hour after lead sourcer)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Agent mode'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+          - draft
+          - send
+
+jobs:
+  cold-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml
+
+      - name: Run Cold Email Agent
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+          FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+        run: python cold_email_agent.py --${{ github.event.inputs.mode || 'draft' }} --max 20

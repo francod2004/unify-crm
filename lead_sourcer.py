@@ -1355,7 +1355,7 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
             f"{named} with owner name, {saved_no_name} need name enrichment. "
             f"({breakdown}). "
             f"Skipped: {skipped_no_name} no-info, {skipped_duplicate} dupes. "
-            f"Review: synapse-crm-coral.vercel.app"
+            f"Review: unify-crm-coral.vercel.app"
         )
     elif all_leads and not dry_run:
         msg = (
