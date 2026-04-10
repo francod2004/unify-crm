@@ -1,0 +1,29 @@
+name: Caliber Lead Sourcer
+
+on:
+  schedule:
+    - cron: '0 14 * * *'  # 9 AM EST / 10 AM EDT daily
+  workflow_dispatch:        # Manual trigger from Actions tab
+
+jobs:
+  source-leads:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 lxml
+
+      - name: Run Lead Sourcer
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+          FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
+        run: python lead_sourcer.py --max 10
