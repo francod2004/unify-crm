@@ -1159,20 +1159,20 @@ def run_draft(max_drafts=20, dry_run=False):
 
     if drafted > 0:
         msg = (
-            f"Unify: {drafted} email drafts ready in your Gmail! "
-            f"Enriched {enriched_count} owner names. "
-            f"Review drafts and send when ready."
+            f"Unify: {drafted} new leads ready to be called. "
+            f"Emails drafted in your Gmail — review, send, and call. "
+            f"Enriched {enriched_count} owner names this run."
         )
     elif enriched_count > 0:
         msg = (
-            f"Unify: Enriched {enriched_count} owner names but 0 drafts "
-            f"(no prospects with email + owner ready). "
-            f"More leads needed."
+            f"Unify: Enriched {enriched_count} owner names, "
+            f"0 new drafts this run (no prospects with email + owner ready). "
+            f"Leads are building — more coming soon."
         )
     else:
         msg = (
-            f"Unify Email Agent: 0 drafts, 0 enriched. "
-            f"Need more leads with contact info."
+            f"Unify: No new leads to call right now. "
+            f"0 drafts, 0 enriched this run. All caught up."
         )
 
     print(f"\n  Notifying Franco...")
