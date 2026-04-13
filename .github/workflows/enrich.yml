@@ -2,7 +2,7 @@ name: Unify Enrichment (Local)
 
 on:
   schedule:
-    - cron: '0 14,20 * * *'  # 10 AM + 4 PM EDT
+    - cron: '0 14,17,20,23 * * *'  # 10 AM, 1 PM, 4 PM, 7 PM EDT
   workflow_dispatch:
     inputs:
       max:

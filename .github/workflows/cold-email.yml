@@ -2,7 +2,7 @@ name: Unify Cold Email Drafts
 
 on:
   schedule:
-    - cron: '0 15,21 * * *'  # 11 AM + 5 PM EDT (offset from enrichment)
+    - cron: '30 14,17,20,23 * * *'  # 10:30 AM, 1:30 PM, 4:30 PM, 7:30 PM EDT (30 min after enrichment)
   workflow_dispatch:
     inputs:
       mode:
