@@ -342,12 +342,11 @@ def _set_google_cooldown(seconds=300):
 def enrich_prospect(business_name, city, website_url="", existing_email=""):
     """
     Full enrichment pipeline — datacenter-safe sources FIRST:
-      1. Business website About/Team/Contact pages (+ email scraping)
-      2. YellowPages.ca detail page (proven from GitHub Actions)
-      3. Canada411 business listing (proven from GitHub Actions)
-      4. Google panel (fallback — only if not rate limited)
-      5. LinkedIn via Google (fallback)
-      6. Facebook via Google (fallback)
+      1. YellowPages.ca (always works from datacenter — finds website URL + owner)
+      2. Business website About/Team/Contact pages (uses URL from YP or CRM)
+      3. Google panel (fallback — reviews + owner, cooldown on 429)
+      4. LinkedIn via Google (fallback)
+      5. Facebook via Google (fallback)
     Returns dict: {owner, source, stars, review_count, personal_email, found_email}
     """
     result = {
@@ -355,7 +354,51 @@ def enrich_prospect(business_name, city, website_url="", existing_email=""):
         "review_count": 0, "personal_email": "", "found_email": "",
     }
 
-    # --- Try Google for reviews only (non-critical, graceful fail) ---
+    # =========================================================================
+    # STEP 1: YellowPages (ALWAYS runs first — proven on GitHub Actions)
+    # This is our workhorse: finds website URLs, emails, sometimes owners.
+    # =========================================================================
+    print(f"     [YP] Searching for {business_name} in {city}...")
+    yp_result = _scrape_yellowpages_owner(business_name, city)
+
+    if yp_result.get("owner"):
+        result["owner"] = yp_result["owner"]
+        result["source"] = "YellowPages"
+        if yp_result.get("email"):
+            result["found_email"] = yp_result["email"]
+        if yp_result.get("website") and not website_url:
+            website_url = yp_result["website"]
+        result["personal_email"] = _guess_owner_email(
+            yp_result["owner"], existing_email, website_url
+        )
+        return result
+
+    # Even without owner, grab email + website from YP for later steps
+    if yp_result.get("email") and not result["found_email"]:
+        result["found_email"] = yp_result["email"]
+    if yp_result.get("website") and not website_url:
+        website_url = yp_result["website"]
+        print(f"     [YP] Got website URL: {website_url}")
+
+    # =========================================================================
+    # STEP 2: Website scraping (uses URL from CRM or discovered via YP)
+    # =========================================================================
+    if website_url:
+        print(f"     [Website] Scraping {website_url}...")
+        name, emails = _scrape_website_for_owner_and_email(website_url, business_name)
+        if emails:
+            result["found_email"] = emails[0]
+        if name:
+            result["owner"] = name
+            result["source"] = "Website"
+            result["personal_email"] = _guess_owner_email(name, existing_email, website_url)
+            return result
+    else:
+        print(f"     [Website] No URL available — skipping")
+
+    # =========================================================================
+    # STEP 3: Google panel (reviews + owner — fallback, may be rate limited)
+    # =========================================================================
     if _is_google_available():
         stars, count, panel_owner = _scrape_google_panel(business_name, city)
         result["stars"] = stars
@@ -365,46 +408,12 @@ def enrich_prospect(business_name, city, website_url="", existing_email=""):
             result["source"] = "Google"
             result["personal_email"] = _guess_owner_email(panel_owner, existing_email, website_url)
             return result
+    else:
+        print(f"     [Google] Skipped — cooldown active")
 
-    # --- Datacenter-safe sources (Tier 1 — always work) ---
-    # Website scraping returns (name, emails_found_list)
-    if website_url:
-        name, emails = _scrape_website_for_owner_and_email(website_url, business_name)
-        if emails:
-            result["found_email"] = emails[0]  # best email from website
-        if name:
-            result["owner"] = name
-            result["source"] = "Website"
-            result["personal_email"] = _guess_owner_email(name, existing_email, website_url)
-            return result
-
-    # YellowPages direct scrape
-    yp_result = _scrape_yellowpages_owner(business_name, city)
-    if yp_result.get("owner"):
-        result["owner"] = yp_result["owner"]
-        result["source"] = "YellowPages"
-        if yp_result.get("email"):
-            result["found_email"] = yp_result["email"]
-        if yp_result.get("website") and not website_url:
-            website_url = yp_result["website"]  # use for email guessing
-        result["personal_email"] = _guess_owner_email(
-            yp_result["owner"], existing_email, website_url
-        )
-        return result
-    elif yp_result.get("email") and not result["found_email"]:
-        result["found_email"] = yp_result["email"]
-    if yp_result.get("website") and not website_url:
-        website_url = yp_result["website"]
-
-    # Canada411 direct scrape
-    name_411 = _scrape_canada411_owner(business_name, city)
-    if name_411:
-        result["owner"] = name_411
-        result["source"] = "Canada411"
-        result["personal_email"] = _guess_owner_email(name_411, existing_email, website_url)
-        return result
-
-    # --- Google-dependent sources (Tier 2 — fallback, may be rate limited) ---
+    # =========================================================================
+    # STEP 4: LinkedIn + Facebook via Google search (last resort)
+    # =========================================================================
     if _is_google_available():
         for source_name, queries in [
             ("LinkedIn", [
@@ -425,8 +434,6 @@ def enrich_prospect(business_name, city, website_url="", existing_email=""):
                 result["source"] = source_name
                 result["personal_email"] = _guess_owner_email(name, existing_email, website_url)
                 return result
-    else:
-        print(f"     [Google] All Google sources skipped — cooldown active")
 
     return result
 
@@ -642,16 +649,25 @@ def _scrape_yellowpages_owner(business_name, city):
             listings = soup.select("div.resultList div, div.result")
 
         detail_url = ""
+        best_listing = None
         for listing in listings[:5]:
             name_el = listing.select_one(
                 "a.listing__name--link, h3.listing__name, "
-                "a[class*='listing__name'], h2 a, h3 a"
+                "a[class*='listing__name'], span.listing__name, h2 a, h3 a"
             )
             if not name_el:
                 continue
             listed_name = name_el.get_text(strip=True).lower()
-            # Check if this listing matches our business
-            if business_name.lower()[:10] in listed_name or listed_name in business_name.lower():
+            biz_lower = business_name.lower()
+            # Flexible matching: first significant word, first 8 chars, or mutual containment
+            first_word = biz_lower.split()[0] if biz_lower.split() else ""
+            match = (
+                biz_lower[:8] in listed_name
+                or listed_name[:8] in biz_lower
+                or (first_word and len(first_word) > 3 and first_word in listed_name)
+                or listed_name in biz_lower
+            )
+            if match:
                 href = name_el.get("href", "")
                 if href and not href.startswith("http"):
                     href = "https://www.yellowpages.ca" + href
@@ -730,8 +746,9 @@ def _scrape_yellowpages_owner(business_name, city):
 
 def _scrape_canada411_owner(business_name, city):
     """
-    Search 411.ca directly (no Google needed — proven on GitHub Actions).
-    Returns owner name or "".
+    Search 411.ca directly. Returns owner name or "".
+    NOTE: 411.ca frequently returns 403 from datacenter IPs (GitHub Actions).
+    Kept as a best-effort attempt — not relied upon.
     """
     try:
         url = (
