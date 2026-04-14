@@ -75,8 +75,45 @@ GENERIC_EMAILS = {
     "webmaster@", "mail@", "enquiries@", "inquiries@",
 }
 
-# Dead-end email prefixes — never worth emailing
+# Dead-end email prefixes -- never worth emailing
 DEAD_END_EMAILS = {"noreply@", "no-reply@", "donotreply@", "do-not-reply@"}
+
+# Aggregator / directory / social domains -- emails on these aren't real
+# business inboxes. They're scraped artifacts (e.g. info@canpages.ca is
+# the directory itself, not the business), or social platforms that don't
+# accept external email.
+DEAD_END_DOMAINS = {
+    "canpages.ca",
+    "foodpages.ca",
+    "yellowpages.ca",
+    "yp.ca",
+    "411.ca",
+    "findopen.ca",
+    "findopenhours.com",
+    "cylex-canada.ca",
+    "yelp.com",
+    "yelp.ca",
+    "bbb.org",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "linkedin.com",
+    "google.com",
+}
+
+
+def _is_dead_end_email(email: str) -> bool:
+    """True if email is a dead-end prefix (noreply@) or an aggregator domain."""
+    e = (email or "").strip().lower()
+    if not e or "@" not in e:
+        return False
+    if any(e.startswith(p) for p in DEAD_END_EMAILS):
+        return True
+    domain = e.split("@", 1)[1]
+    if any(domain == d or domain.endswith("." + d) for d in DEAD_END_DOMAINS):
+        return True
+    return False
 
 
 # -- Gmail Setup --------------------------------------------------------------
@@ -205,8 +242,8 @@ def get_prospects_to_email(redraft=False):
         if not email or "@" not in email:
             no_email += 1
             continue
-        # Skip dead-end addresses
-        if any(email.startswith(d) for d in DEAD_END_EMAILS):
+        # Skip dead-end addresses (noreply prefixes + aggregator domains)
+        if _is_dead_end_email(email):
             dead_end += 1
             continue
         if status not in allowed_statuses:
@@ -496,9 +533,9 @@ def _scrape_facebook_email(business_name, city):
                     email = match.group(0).lower().rstrip(".")
                     if email.endswith((".png", ".jpg", ".gif", ".webp", ".svg")):
                         continue
-                    if any(d in email for d in ["facebook.com", "fbcdn", "fb.com"]):
+                    if any(d in email for d in ["fbcdn", "fb.com"]):
                         continue
-                    if any(email.startswith(x) for x in DEAD_END_EMAILS):
+                    if _is_dead_end_email(email):
                         continue
                     print(f"     [Facebook] Found email: {email}")
                     return email
@@ -550,9 +587,9 @@ def _google_search_email(business_name, city):
             email = email.lower().rstrip(".")
             if email.endswith((".png", ".jpg", ".gif", ".webp", ".svg")):
                 continue
-            if any(d in email for d in ["google.com", "googlemail", "gstatic", "googleusercontent", "schema.org", "w3.org"]):
+            if any(d in email for d in ["googlemail", "gstatic", "googleusercontent", "schema.org", "w3.org"]):
                 continue
-            if any(email.startswith(x) for x in DEAD_END_EMAILS):
+            if _is_dead_end_email(email):
                 continue
             candidates.append(email)
 
