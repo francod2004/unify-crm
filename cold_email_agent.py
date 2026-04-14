@@ -1374,21 +1374,55 @@ def generate_email(prospect):
         f"{consult}\n\n"
         f"Open to a quick chat? Reply here or text me at (647) 210-3737.\n\n"
         f"Look forward to hearing from you.\n\n"
+        f"--\n"
         f"Franco Di Giovanni\n"
-        f"Unify AI Partners\n"
-        f"franco@unifyaipartners.ca"
+        f"Founder | Unify AI Partners\n"
+        f"(647) 210-3737\n"
+        f"franco@unifyaipartners.ca\n"
+        f"unifyaipartners.ca"
+    )
+
+    # Professional HTML signature with Unify logo
+    logo_url = "https://raw.githubusercontent.com/francod2004/unify-crm/main/assets/unify_logo.png"
+    signature_html = (
+        '<table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid #024AA5;padding-top:16px;font-family:Arial,Helvetica,sans-serif;">'
+        '<tr>'
+        # Logo column
+        '<td style="vertical-align:top;padding-right:14px;">'
+        f'<a href="https://unifyaipartners.ca" style="text-decoration:none;">'
+        f'<img src="{logo_url}" alt="Unify AI Partners" width="60" height="65" style="display:block;border:0;" />'
+        f'</a>'
+        '</td>'
+        # Divider
+        '<td style="width:2px;background-color:#024AA5;font-size:0;line-height:0;" width="2">&nbsp;</td>'
+        # Info column
+        '<td style="vertical-align:top;padding-left:14px;">'
+        '<table cellpadding="0" cellspacing="0" border="0">'
+        '<tr><td style="font-size:15px;font-weight:700;color:#0A1E3D;padding-bottom:1px;font-family:Arial,Helvetica,sans-serif;">Franco Di Giovanni</td></tr>'
+        '<tr><td style="font-size:11px;color:#024AA5;padding-bottom:8px;font-family:Arial,Helvetica,sans-serif;letter-spacing:0.8px;font-weight:600;">FOUNDER</td></tr>'
+        '<tr><td style="font-size:12px;color:#555;padding-bottom:3px;font-family:Arial,Helvetica,sans-serif;">'
+        '(647) 210-3737'
+        '</td></tr>'
+        '<tr><td style="font-size:12px;padding-bottom:3px;font-family:Arial,Helvetica,sans-serif;">'
+        '<a href="mailto:franco@unifyaipartners.ca" style="color:#024AA5;text-decoration:none;">franco@unifyaipartners.ca</a>'
+        '</td></tr>'
+        '<tr><td style="font-size:12px;font-family:Arial,Helvetica,sans-serif;">'
+        '<a href="https://unifyaipartners.ca" style="color:#024AA5;text-decoration:none;font-weight:600;">unifyaipartners.ca</a>'
+        '</td></tr>'
+        '</table>'
+        '</td>'
+        '</tr>'
+        '</table>'
     )
 
     body_html = (
-        f"<p>{greeting},</p>"
-        f"<p>{hook}</p>"
-        f"<p>{pitch}</p>"
-        f"<p>{consult}</p>"
-        f"<p>Open to a quick chat? Reply here or text me at (647) 210-3737.</p>"
-        f"<p>Look forward to hearing from you.</p>"
-        f"<p>Franco Di Giovanni<br>"
-        f"<strong>Unify AI Partners</strong><br>"
-        f"<a href='mailto:franco@unifyaipartners.ca'>franco@unifyaipartners.ca</a></p>"
+        f"<p style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;'>{greeting},</p>"
+        f"<p style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;'>{hook}</p>"
+        f"<p style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;'>{pitch}</p>"
+        f"<p style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;'>{consult}</p>"
+        f"<p style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;'>Open to a quick chat? Reply here or text me at (647) 210-3737.</p>"
+        f"<p style='font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333;'>Look forward to hearing from you.</p>"
+        f"{signature_html}"
     )
 
     return {
