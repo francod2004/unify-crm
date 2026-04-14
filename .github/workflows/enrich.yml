@@ -14,17 +14,24 @@ jobs:
   enrich:
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 45
+    env:
+      PYTHON: C:\UnifyPython\3.12.10\python.exe
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Verify portable Python
+        shell: powershell
+        run: |
+          & "$env:PYTHON" --version
+          & "$env:PYTHON" -m pip --version
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4 lxml dnspython
+        shell: powershell
+        run: |
+          & "$env:PYTHON" -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 lxml dnspython
 
       - name: Run Enrichment
+        shell: powershell
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -32,4 +39,5 @@ jobs:
           TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
           TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
           FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
-        run: python cold_email_agent.py --enrich-only --max ${{ github.event.inputs.max || '50' }}
+        run: |
+          & "$env:PYTHON" cold_email_agent.py --enrich-only --max ${{ github.event.inputs.max || '50' }}
