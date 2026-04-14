@@ -1338,13 +1338,13 @@ def generate_email(prospect):
     address = prospect.get("address", "")
     notes = prospect.get("notes", "")
 
-    # Greeting: use owner first name if available, "Hi there" if not
+    # Greeting: use owner first name if available, "Hi {business} team" if not
     if owner:
         first_name = owner.split()[0]
         greeting = f"Hi {first_name}"
         to_name = first_name
     else:
-        greeting = "Hi there"
+        greeting = f"Hi {business_name} team"
         to_name = business_name
 
     # Extract city
