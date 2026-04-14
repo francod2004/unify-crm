@@ -2,7 +2,7 @@ name: Unify Lead Sourcer
 
 on:
   schedule:
-    - cron: '0 14 * * *'  # 9 AM EST / 10 AM EDT daily
+    - cron: '17 14 * * *'  # 10:17 AM EDT daily (off-peak minute to avoid cron skips)
   workflow_dispatch:        # Manual trigger from Actions tab
 
 jobs:
