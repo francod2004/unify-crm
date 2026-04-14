@@ -1472,72 +1472,101 @@ _DEFAULT_COPY = {
 }
 
 
-# Tier 3 value-driven hooks by vertical — hint at a pain point, create curiosity
-# These are COMPLETE opening lines (not fragments) to avoid generic "I came across X" formula
+# 3-tier personalized hooks by vertical — one entry per (vertical, tier).
+# All three tiers produce COMPLETE opening paragraphs (not fragments).
+#   tier1: reviews data available (stars >= 4.0 AND count >= 10)
+#   tier2: years in business available (years >= 10)
+#   tier3: no data — warmer, vaguer "research" framing
 _VERTICAL_HOOKS = {
-    "Restaurants": "I was checking out {business_name} and had a quick idea about keeping tables full without relying on word of mouth alone.",
-    "Retail": "I was looking into {business_name} and had a thought on turning more foot traffic into repeat customers.",
-    "Trades": "I came across {business_name} and had a quick idea about keeping your schedule booked without chasing leads.",
-    "Dental & Medical": "I was looking into {business_name} and had an idea about keeping your appointment book full with less front-desk effort.",
-    "Salons & Spas": "I came across {business_name} and had a quick idea about keeping your chair booked and clients coming back.",
-    "Professional Services": "I was looking into {business_name} and had a thought about freeing up hours you're probably spending on admin and follow-ups.",
-    "Fitness & Wellness": "I came across {business_name} and had an idea about boosting member retention without adding to your plate.",
-    "Auto Services": "I was looking into {business_name} and had a quick idea about keeping your bays full without relying on drive-bys.",
-    "Cleaning & Property": "I came across {business_name} and had a thought about locking in more recurring contracts without cold calling.",
+    "Restaurants": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — people don't keep coming back like that unless something's being done right, and that's not easy to curate.",
+        "tier2": "{years} years serving the same community says something — longevity like that doesn't happen by accident, it means you're doing right by your regulars.",
+        "tier3": "I do research on independent restaurants across the GTA, which is how I came across {business_name}. You had that feel of a spot where real people still care about what they're doing, and those are the businesses I like to connect with.",
+    },
+    "Retail": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — customers don't leave that kind of feedback unless something's being done right, and that's not easy to curate.",
+        "tier2": "{years} years serving the same neighbourhood says something — longevity like that doesn't happen by accident in retail, it means you're doing right by the people who walk through your door.",
+        "tier3": "I do research on independent retail shops across the GTA, which is how I came across {business_name}. You had that feel of a shop where real people still care about what they're doing, and those are the businesses I like to connect with.",
+    },
+    "Trades": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — trades reviews like that don't show up by accident, it means you're doing the work right, and that's not easy to curate.",
+        "tier2": "{years} years on the tools says something — longevity like that doesn't happen by accident, it means you've built a name on referrals and repeat work.",
+        "tier3": "I do research on independent trades across the GTA, which is how I came across {business_name}. You had that feel of a business where real people still care about doing the job right, and those are the ones I like to connect with.",
+    },
+    "Dental & Medical": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — patients don't leave feedback like that unless they trust the care they're getting, and that's not easy to curate.",
+        "tier2": "{years} years serving the same community says something — longevity like that doesn't happen by accident in healthcare, it means you've earned the trust of your patients.",
+        "tier3": "I do research on independent practices across the GTA, which is how I came across {business_name}. You had that feel of a practice where real people still care about the patients in front of them, and those are the ones I like to connect with.",
+    },
+    "Salons & Spas": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — clients don't keep coming back like that unless something's being done right, and that's not easy to curate.",
+        "tier2": "{years} years behind the chair says something — longevity like that doesn't happen by accident, it means you're doing right by your regulars.",
+        "tier3": "I do research on independent salons and spas across the GTA, which is how I came across {business_name}. You had that feel of a place where real people still care about the clients in their chair, and those are the businesses I like to connect with.",
+    },
+    "Professional Services": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — clients don't recommend firms like that unless something's being done right, and that's not easy to curate.",
+        "tier2": "{years} years of serving clients says something — longevity like that doesn't happen by accident, it means you've built trust with the people you work for.",
+        "tier3": "I do research on independent professional service firms across the GTA, which is how I came across {business_name}. You had that feel of a firm where real people still care about their clients, and those are the businesses I like to connect with.",
+    },
+    "Fitness & Wellness": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — members don't stick around like that unless something's being done right, and that's not easy to curate.",
+        "tier2": "{years} years in the community says something — longevity like that doesn't happen by accident, it means you've built something people keep coming back to.",
+        "tier3": "I do research on independent fitness and wellness studios across the GTA, which is how I came across {business_name}. You had that feel of a place where real people still care about the members who walk through the door, and those are the businesses I like to connect with.",
+    },
+    "Auto Services": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — customers don't leave feedback like that for an auto shop unless you're doing right by them, and that's not easy to curate.",
+        "tier2": "{years} years in the bay says something — longevity like that doesn't happen by accident, it means you've earned the trust of your customers.",
+        "tier3": "I do research on independent auto shops across the GTA, which is how I came across {business_name}. You had that feel of a shop where real people still care about doing the work right, and those are the businesses I like to connect with.",
+    },
+    "Cleaning & Property": {
+        "tier1": "A {rating} rating across {reviews} reviews tells me a lot — clients don't keep renewing like that unless something's being done right, and that's not easy to curate.",
+        "tier2": "{years} years of holding onto clients says something — longevity like that doesn't happen by accident, it means you're delivering consistently.",
+        "tier3": "I do research on independent cleaning and property businesses across the GTA, which is how I came across {business_name}. You had that feel of a business where real people still care about the work, and those are the ones I like to connect with.",
+    },
 }
-_DEFAULT_HOOK = "I came across {business_name} in {city} and had a quick idea I wanted to share."
+
+# Fallback tier 3 for unknown verticals — keeps same shape
+_DEFAULT_TIER3 = "I do research on independent local businesses across the GTA, which is how I came across {business_name}. You had that feel of a place where real people still care about what they're doing, and those are the businesses I like to connect with."
 
 
 def _generate_hook(business_name, city, notes, vertical):
     """
     Generate a personalized hook using 3-tier system:
-      Tier 1: Google reviews (rating + count) — best, most specific
-      Tier 2: Years in business (7+ years from YP) — shows credibility
-      Tier 3: Specialization + personable ending per vertical — always available
-    Returns the hook string (everything after "I came across {business_name} in {city} -- ").
+      Tier 1: Reviews (stars >= 4.0 AND count >= 10) — most personalized
+      Tier 2: Years in business (years >= 10) — still grounded in data
+      Tier 3: No data — warmer, vaguer "research" framing
+    Returns a complete opening paragraph (not a fragment).
     """
-    stars = 0
+    stars = 0.0
     count = 0
     years = 0
 
     if notes:
-        # Parse review data
         star_match = re.search(r'(\d+\.?\d*)\s*stars?,\s*(\d+)\s*reviews?', notes)
         if star_match:
             stars = float(star_match.group(1))
             count = int(star_match.group(2))
-        # Parse years in business
         years_match = re.search(r'(\d+)\s*(?:years?\s*in\s*business|yrs?\s*in\s*biz)', notes, re.I)
         if years_match:
             years = int(years_match.group(1))
 
-    # Tier 1: Google reviews
-    if stars > 0 and count > 0:
-        if stars >= 4.5 and count >= 50:
-            hook = f"{stars} stars across {count} reviews is no joke"
-        elif count >= 100:
-            hook = f"{count} reviews and a {stars} rating -- that reputation is earned"
-        elif stars >= 4.5:
-            hook = f"{stars} stars says a lot about how you run things"
-        elif stars >= 4.0:
-            hook = "your reviews speak for themselves"
-        else:
-            hook = "it's clear you've built something real"
-        return f"I came across {business_name} in {city} -- {hook}."
+    templates = _VERTICAL_HOOKS.get(vertical)
+    if not templates:
+        return _DEFAULT_TIER3.format(business_name=business_name)
 
-    # Tier 2: Years in business (7+ years)
-    if years >= 7:
-        if years >= 20:
-            hook = f"{years} years in the game speaks for itself"
-        elif years >= 15:
-            hook = f"been serving {city} for over {years} years -- that's no small thing"
-        else:
-            hook = f"{years} years in business says a lot"
-        return f"I came across {business_name} in {city} -- {hook}."
+    # Tier 1: credible reviews (quality + volume)
+    if stars >= 4.0 and count >= 10:
+        rating_str = f"{stars:.1f}"
+        return templates["tier1"].format(rating=rating_str, reviews=count, business_name=business_name)
 
-    # Tier 3: Vertical-specific value hook (complete opening line)
-    template = _VERTICAL_HOOKS.get(vertical, _DEFAULT_HOOK)
-    return template.format(business_name=business_name, city=city)
+    # Tier 2: established business (10+ years)
+    if years >= 10:
+        return templates["tier2"].format(years=years, business_name=business_name)
+
+    # Tier 3: no hard data — softer, vaguer warmth
+    # Strip trailing period (e.g. "Brandvision Inc.") so the template sentence
+    # doesn't produce a double period before "You had that feel...".
+    return templates["tier3"].format(business_name=business_name.rstrip('.'))
 
 
 def generate_email(prospect):
