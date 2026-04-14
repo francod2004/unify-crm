@@ -1564,7 +1564,9 @@ def _generate_hook(business_name, city, notes, vertical):
         return templates["tier2"].format(years=years, business_name=business_name)
 
     # Tier 3: no hard data — softer, vaguer warmth
-    return templates["tier3"].format(business_name=business_name)
+    # Strip trailing period (e.g. "Brandvision Inc.") so the template sentence
+    # doesn't produce a double period before "You had that feel...".
+    return templates["tier3"].format(business_name=business_name.rstrip('.'))
 
 
 def generate_email(prospect):
