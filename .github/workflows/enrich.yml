@@ -30,7 +30,16 @@ jobs:
         run: |
           & "$env:PYTHON" -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 lxml dnspython
 
+      # Layer 1: run enrichment with a 35-min hard step timeout.
+      # Python also has its own cooperative 35-min cutoff (runs first in the
+      # common case, sends detailed SMS with stats).
+      # If python gets wedged inside a blocking syscall and ignores the
+      # cooperative cutoff, this step-level timeout kills it cleanly.
+      # continue-on-error so the fallback-SMS step below still runs on cancel.
       - name: Run Enrichment
+        id: enrich
+        timeout-minutes: 35
+        continue-on-error: true
         shell: powershell
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -41,3 +50,30 @@ jobs:
           FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
         run: |
           & "$env:PYTHON" cold_email_agent.py --enrich-only --max ${{ github.event.inputs.max || '50' }}
+
+      # Layer 2: if enrichment step didn't succeed (timed out or crashed),
+      # send a fallback SMS so Franco always hears from the run.
+      # Skipped on success (python already sent its own detailed SMS).
+      - name: Fallback SMS on enrichment timeout/failure
+        if: steps.enrich.outcome != 'success'
+        shell: powershell
+        env:
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
+          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+          FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
+          ENRICH_OUTCOME: ${{ steps.enrich.outcome }}
+        run: |
+          $body = "Unify Enrichment: python wedged and hit the 35-min workflow timeout ($env:ENRICH_OUTCOME). Partial data already saved in Supabase -- check the CRM for prospects enriched this run."
+          $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${env:TWILIO_SID}:${env:TWILIO_TOKEN}"))
+          $headers = @{ Authorization = "Basic $auth" }
+          $uri = "https://api.twilio.com/2010-04-01/Accounts/$env:TWILIO_SID/Messages.json"
+          $maxLen = [Math]::Min(1600, $body.Length)
+          $payload = @{ From = $env:TWILIO_FROM; To = $env:FRANCO_PHONE; Body = $body.Substring(0, $maxLen) }
+          try {
+            Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $payload -TimeoutSec 30 | Out-Null
+            Write-Host "Fallback SMS sent."
+          } catch {
+            Write-Host "Fallback SMS FAILED: $_"
+            exit 1
+          }
