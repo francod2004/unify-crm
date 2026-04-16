@@ -30,7 +30,7 @@ Usage:
 Requires env vars or .env file -- see .env.template
 """
 
-import os, sys, re, json, time, random, argparse, hashlib, uuid
+import os, sys, re, json, time, random, argparse
 from datetime import datetime, timezone
 from urllib.parse import quote_plus, urljoin, urlparse
 
@@ -958,146 +958,6 @@ def scrape_411ca(search_term, area, max_results=10):
     return results
 
 
-# ==============================================================================
-# WEBSITE ENRICHMENT (v2.1 — expanded name extraction)
-# ==============================================================================
-
-def enrich_from_website(url):
-    """
-    Visit a business website and try to extract:
-    - Email address
-    - Phone number
-    - Owner/contact name (expanded: team pages, structured data, OG tags)
-    """
-    info = {"email": "", "phone": "", "owner": ""}
-    if not url:
-        return info
-
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=10, allow_redirects=True)
-        text = r.text[:80_000]
-        soup = BeautifulSoup(text, "lxml")
-
-        # -- Email --
-        for a in soup.select("a[href^='mailto:']"):
-            email = a.get("href", "").replace("mailto:", "").split("?")[0].strip()
-            if "@" in email and "example" not in email:
-                info["email"] = email
-                break
-
-        if not info["email"]:
-            emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
-            skip = ["example.com", "sentry.io", "wixpress", "googleapis",
-                    "wordpress", "w3.org", "schema.org", "gravatar",
-                    "jquery", "cloudflare", "google", "facebook"]
-            emails = [e for e in emails if not any(s in e.lower() for s in skip)]
-            if emails:
-                info["email"] = emails[0]
-
-        # -- Phone --
-        for a in soup.select("a[href^='tel:']"):
-            tel = a.get("href", "").replace("tel:", "").strip()
-            if len(re.sub(r'\D', '', tel)) >= 10:
-                info["phone"] = tel
-                break
-        if not info["phone"]:
-            phones = re.findall(r'\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}', text)
-            if phones:
-                info["phone"] = phones[0]
-
-        # -- Owner Name --
-        owner_patterns = [
-            r'(?:owner|proprietor|founded by|chef|operated by|managed by)[:\s]+([A-Z][a-z]+\s+[A-Z][a-z]+)',
-            r'(?:owner|proprietor|founded by|chef)[:\s]+([A-Z][a-z]+)',
-            r'(?:Hi,?\s+I\'?m|Meet)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)',
-            r'(?:Hi,?\s+I\'?m|Meet)\s+([A-Z][a-z]+)',
-        ]
-
-        # Method 1: JSON-LD structured data (schema.org)
-        for script_tag in soup.select("script[type='application/ld+json']"):
-            try:
-                ld = json.loads(script_tag.string or "")
-                # Handle arrays
-                if isinstance(ld, list):
-                    for item in ld:
-                        if isinstance(item, dict):
-                            for key in ("founder", "author", "employee", "member"):
-                                person = item.get(key)
-                                if isinstance(person, dict) and person.get("name"):
-                                    info["owner"] = person["name"]
-                                    break
-                                elif isinstance(person, list) and person and isinstance(person[0], dict):
-                                    info["owner"] = person[0].get("name", "")
-                                    break
-                        if info["owner"]:
-                            break
-                elif isinstance(ld, dict):
-                    for key in ("founder", "author", "employee", "member"):
-                        person = ld.get(key)
-                        if isinstance(person, dict) and person.get("name"):
-                            info["owner"] = person["name"]
-                            break
-                        elif isinstance(person, list) and person and isinstance(person[0], dict):
-                            info["owner"] = person[0].get("name", "")
-                            break
-            except (json.JSONDecodeError, TypeError):
-                pass
-            if info["owner"]:
-                break
-
-        # Method 2: Meta tags (author, og)
-        if not info["owner"]:
-            for tag in soup.select("meta[name='author'], meta[property='article:author'], meta[property='og:site_name']"):
-                content = tag.get("content", "").strip()
-                # og:site_name is usually the business name, skip it
-                if tag.get("property") == "og:site_name":
-                    continue
-                if content and len(content) < 50 and " " in content:
-                    info["owner"] = content
-                    break
-
-        # Method 3: Text patterns on main page
-        if not info["owner"]:
-            visible_text = soup.get_text(" ", strip=True)[:10_000]
-            for pattern in owner_patterns:
-                match = re.search(pattern, visible_text)
-                if match:
-                    candidate = match.group(1).strip()
-                    if 2 < len(candidate) < 40 and not any(c.isdigit() for c in candidate):
-                        info["owner"] = candidate
-                        break
-
-        # Method 4: Check About / Team pages
-        if not info["owner"] and url.rstrip("/").count("/") <= 3:
-            subpages = [
-                "/about", "/about-us", "/our-story",
-                "/team", "/our-team", "/staff", "/meet-the-team",
-                "/contact", "/contact-us",
-            ]
-            for suffix in subpages:
-                try:
-                    sub_url = url.rstrip("/") + suffix
-                    r2 = requests.get(sub_url, headers=HEADERS, timeout=8, allow_redirects=True)
-                    if r2.status_code == 200 and len(r2.text) > 500:
-                        sub_text = BeautifulSoup(r2.text[:30_000], "lxml").get_text(" ", strip=True)[:5000]
-                        for pattern in owner_patterns:
-                            match = re.search(pattern, sub_text)
-                            if match:
-                                candidate = match.group(1).strip()
-                                if 2 < len(candidate) < 40 and not any(c.isdigit() for c in candidate):
-                                    info["owner"] = candidate
-                                    break
-                        if info["owner"]:
-                            break
-                except Exception:
-                    pass
-
-    except Exception:
-        pass
-
-    return info
-
-
 # -- Prospect Builder ---------------------------------------------------------
 
 AI_GAPS_BY_VERTICAL = {
@@ -1309,14 +1169,7 @@ def run_agent(verticals=None, areas=None, max_per_search=5, dry_run=False):
                         skipped_too_small += 1
                         continue
 
-                    # Enrich from website
-                    if raw.get("website"):
-                        print(f"   Enriching: {raw['name']}")
-                        extra = enrich_from_website(raw["website"])
-                        raw["email"] = raw.get("email") or extra["email"]
-                        raw["phone"] = raw.get("phone") or extra["phone"]
-                        raw["owner"] = raw.get("owner") or extra["owner"]
-
+                    # Enrichment (owner/email/phone) now handled by enrichment_agent.py
                     # FILTER: Owner name required UNLESS lead has email OR phone
                     has_owner = bool(raw.get("owner", "").strip())
                     has_email = bool(raw.get("email", "").strip())

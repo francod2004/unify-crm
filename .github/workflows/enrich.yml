@@ -1,46 +1,30 @@
-name: Unify Enrichment (Local)
+name: Unify Enrichment
 
 on:
   schedule:
-    - cron: '23 14,17,20,23 * * *'  # 10:23 AM, 1:23 PM, 4:23 PM, 7:23 PM EDT (off-peak minute)
+    - cron: '0 16 * * *'  # 12:00 PM EDT daily -- between sourcer (10 AM) and cold email (2 PM)
   workflow_dispatch:
     inputs:
       max:
         description: 'Max prospects to enrich'
         required: false
-        default: '50'
+        default: '100'
 
 jobs:
   enrich:
-    runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 45
-    env:
-      PYTHON: C:\UnifyPython\3.12.10\python.exe
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify portable Python
-        shell: powershell
-        run: |
-          & "$env:PYTHON" --version
-          & "$env:PYTHON" -m pip --version
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Install dependencies
-        shell: powershell
-        run: |
-          & "$env:PYTHON" -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 lxml dnspython
+        run: pip install --disable-pip-version-check -r requirements.txt
 
-      # Layer 1: run enrichment with a 35-min hard step timeout.
-      # Python also has its own cooperative 35-min cutoff (runs first in the
-      # common case, sends detailed SMS with stats).
-      # If python gets wedged inside a blocking syscall and ignores the
-      # cooperative cutoff, this step-level timeout kills it cleanly.
-      # continue-on-error so the fallback-SMS step below still runs on cancel.
       - name: Run Enrichment
-        id: enrich
-        timeout-minutes: 35
-        continue-on-error: true
-        shell: powershell
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -48,32 +32,6 @@ jobs:
           TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
           TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
           FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
-        run: |
-          & "$env:PYTHON" cold_email_agent.py --enrich-only --max ${{ github.event.inputs.max || '50' }}
-
-      # Layer 2: if enrichment step didn't succeed (timed out or crashed),
-      # send a fallback SMS so Franco always hears from the run.
-      # Skipped on success (python already sent its own detailed SMS).
-      - name: Fallback SMS on enrichment timeout/failure
-        if: steps.enrich.outcome != 'success'
-        shell: powershell
-        env:
-          TWILIO_SID: ${{ secrets.TWILIO_SID }}
-          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
-          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
-          FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
-          ENRICH_OUTCOME: ${{ steps.enrich.outcome }}
-        run: |
-          $body = "Unify Enrichment: python wedged and hit the 35-min workflow timeout ($env:ENRICH_OUTCOME). Partial data already saved in Supabase -- check the CRM for prospects enriched this run."
-          $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("${env:TWILIO_SID}:${env:TWILIO_TOKEN}"))
-          $headers = @{ Authorization = "Basic $auth" }
-          $uri = "https://api.twilio.com/2010-04-01/Accounts/$env:TWILIO_SID/Messages.json"
-          $maxLen = [Math]::Min(1600, $body.Length)
-          $payload = @{ From = $env:TWILIO_FROM; To = $env:FRANCO_PHONE; Body = $body.Substring(0, $maxLen) }
-          try {
-            Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $payload -TimeoutSec 30 | Out-Null
-            Write-Host "Fallback SMS sent."
-          } catch {
-            Write-Host "Fallback SMS FAILED: $_"
-            exit 1
-          }
+          GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python enrichment_agent.py --max ${{ github.event.inputs.max || '100' }}
