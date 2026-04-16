@@ -93,6 +93,7 @@ DATA_FIELDS = {
     "email", "phone", "owner", "owner_name",
     "about_us_content", "years_in_business", "credentials",
     "rating", "review_count", "hours", "is_operational",
+    "manual_work_score", "manual_work_signal", "priority",
 }
 
 
@@ -444,12 +445,13 @@ def extract_credentials(text, vertical):
 
 def places_lookup(business_name):
     """
-    Returns dict: rating, review_count, hours, is_operational, phone.
+    Returns dict: rating, review_count, hours, is_operational, phone, review_texts.
     All None if Places has no match. Raises RuntimeError only if API key missing.
+    review_texts is a list of review text strings (up to 5).
     """
     result = {
         "rating": None, "review_count": None, "hours": None,
-        "is_operational": None, "phone": None,
+        "is_operational": None, "phone": None, "review_texts": [],
     }
     if not GOOGLE_PLACES_API_KEY:
         raise RuntimeError("GOOGLE_PLACES_API_KEY is required")
@@ -490,7 +492,7 @@ def places_lookup(business_name):
                 "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
                 "X-Goog-FieldMask": (
                     "rating,userRatingCount,regularOpeningHours,"
-                    "businessStatus,nationalPhoneNumber"
+                    "businessStatus,nationalPhoneNumber,reviews.text"
                 ),
             },
             timeout=15,
@@ -521,7 +523,220 @@ def places_lookup(business_name):
         phone = re.sub(r"[^\d+]", "", raw_phone)
         if len(phone) >= 10:
             result["phone"] = phone
+
+    # Extract review texts (up to 5)
+    for rev in details.get("reviews", []):
+        text_obj = rev.get("text", {})
+        text = text_obj.get("text", "") if isinstance(text_obj, dict) else str(text_obj)
+        if text:
+            result["review_texts"].append(text)
+
     return result
+
+
+# =============================================================================
+# MANUAL-WORK SCORING (duplicated from lead_sourcer.py by design --
+# keeps agents independent per the "one clean script" rule)
+# =============================================================================
+
+_DENTAL_BOOKING_KEYWORDS = [
+    "book online", "schedule online", "book appointment", "online booking",
+    "book now", "schedule now", "request appointment", "book your appointment",
+    "schedule your", "online scheduling",
+]
+
+_LIVE_CHAT_SCRIPTS = [
+    "intercom", "drift", "tidio", "livechat", "hubspot",
+    "zendesk", "tawk", "crisp", "olark", "freshchat",
+]
+
+_OWNER_DENTIST_PATTERNS = [
+    r"dr\.\s+\w+",
+    r"owner[\s-]operator",
+    r"locally\s+owned",
+    r"family\s+practice",
+    r"family[\s-]owned",
+    r"our\s+dentist",
+    r"your\s+dentist",
+    r"meet\s+the\s+doctor",
+    r"meet\s+dr\.",
+]
+
+_CALL_FOR_QUOTE_KEYWORDS = [
+    "call for quote", "call for estimate", "call for a free",
+    "call today for", "call us for", "call now for",
+    "phone for a quote", "give us a call",
+]
+
+_OWNER_OPERATOR_KEYWORDS = [
+    "family-owned", "family owned", "owner-operated", "owner operated",
+    "locally owned", "locally-owned", "i've been serving",
+    "my team and i", "our family business", "family run",
+    "family-run", "we are a family",
+]
+
+_SLOW_RESPONSE_KEYWORDS = [
+    "hard to reach", "couldn't get through", "could not get through",
+    "no answer", "called several times", "never answered",
+    "slow to respond", "didn't return my call", "didn't call back",
+    "hard to get a hold", "hard to contact", "unreachable",
+    "left multiple messages", "never got back",
+]
+
+
+def compute_manual_work_score(vertical, html_text, homepage_fetched, review_texts):
+    """
+    Compute a 0-10 manual work score based on homepage signals + review texts.
+    Returns (score, priority, signal_string).
+    """
+    score = 0
+    signals = []  # (points, description)
+
+    html_lower = html_text.lower() if html_text else ""
+
+    if vertical in DENTAL_MEDICAL_VERTICALS or vertical == "Dental & Medical":
+        # No online booking link (+3)
+        has_booking = any(kw in html_lower for kw in _DENTAL_BOOKING_KEYWORDS)
+        if not has_booking and homepage_fetched:
+            score += 3
+            signals.append((3, "no online booking system found"))
+
+        # Contact form to generic mailer (+2)
+        if homepage_fetched and html_text:
+            soup = BeautifulSoup(html_text, "lxml")
+            for form in soup.select("form"):
+                action = (form.get("action") or "").lower()
+                form_text = form.get_text(" ", strip=True).lower()
+                if ("contact" in form_text or "message" in form_text or
+                    "mailto:" in action or "formspree" in action or
+                    "getform" in action or "netlify" in action):
+                    if not any(bk in form_text for bk in ["book", "schedule", "appointment"]):
+                        score += 2
+                        signals.append((2, "contact form without booking integration"))
+                        break
+
+        # No live chat widget (+1)
+        has_chat = any(kw in html_lower for kw in _LIVE_CHAT_SCRIPTS)
+        if not has_chat and homepage_fetched:
+            score += 1
+            signals.append((1, "no live chat widget"))
+
+        # Outdated site design (+1)
+        if homepage_fetched and html_text:
+            has_viewport = 'name="viewport"' in html_lower or "name='viewport'" in html_lower
+            has_doctype = html_lower.strip().startswith("<!doctype html")
+            inline_count = html_lower.count('style="')
+            if (not has_viewport) or (not has_doctype) or (inline_count > 20):
+                score += 1
+                signals.append((1, "outdated site design"))
+
+        # Single location (+1)
+        if homepage_fetched and html_text:
+            addr_matches = re.findall(
+                r'\d+\s+[\w\s]+(?:st|ave|rd|dr|blvd|cres|way|ct|lane|pkwy|hwy)',
+                html_lower
+            )
+            unique_addrs = {re.sub(r'\s+', ' ', a.strip()) for a in addr_matches}
+            if len(unique_addrs) <= 1:
+                score += 1
+                signals.append((1, "single location"))
+
+        # Owner-dentist language (+2)
+        for pat in _OWNER_DENTIST_PATTERNS:
+            if re.search(pat, html_lower, re.I):
+                score += 2
+                signals.append((2, "owner-dentist language on site"))
+                break
+
+    elif vertical == "Trades":
+        # "Call for quote" language (+3)
+        has_call_cta = any(kw in html_lower for kw in _CALL_FOR_QUOTE_KEYWORDS)
+        if not has_call_cta and homepage_fetched and html_text:
+            soup = BeautifulSoup(html_text, "lxml")
+            tel_links = soup.select("a[href^='tel:']")
+            quote_forms = soup.select("form")
+            has_quote_form = False
+            for f in quote_forms:
+                ft = f.get_text(" ", strip=True).lower()
+                if any(w in ft for w in ["quote", "estimate", "book", "schedule"]):
+                    has_quote_form = True
+                    break
+            if tel_links and not has_quote_form:
+                has_call_cta = True
+        if has_call_cta:
+            score += 3
+            signals.append((3, "call for quote with no online form"))
+
+        # No online quote/booking form (+2)
+        if homepage_fetched and html_text:
+            soup = BeautifulSoup(html_text, "lxml")
+            has_quote_form = False
+            for f in soup.select("form"):
+                ft = f.get_text(" ", strip=True).lower()
+                if any(w in ft for w in ["quote", "estimate", "book", "schedule", "request"]):
+                    has_quote_form = True
+                    break
+            if not has_quote_form:
+                score += 2
+                signals.append((2, "no online quote or booking form"))
+
+        # No SMS/auto-response mention (+1)
+        has_sms = any(kw in html_lower for kw in [
+            "text us", "we'll text back", "auto-reply", "auto reply", "sms", "text message",
+        ])
+        if not has_sms and homepage_fetched:
+            score += 1
+            signals.append((1, "no SMS or auto-response"))
+
+        # Owner-operator language (+2)
+        for kw in _OWNER_OPERATOR_KEYWORDS:
+            if kw in html_lower:
+                score += 2
+                signals.append((2, "owner-operator language on site"))
+                break
+
+        # Single location (+1)
+        if homepage_fetched and html_text:
+            addr_matches = re.findall(
+                r'\d+\s+[\w\s]+(?:st|ave|rd|dr|blvd|cres|way|ct|lane|pkwy|hwy)',
+                html_lower
+            )
+            unique_addrs = {re.sub(r'\s+', ' ', a.strip()) for a in addr_matches}
+            if len(unique_addrs) <= 1:
+                score += 1
+                signals.append((1, "single location"))
+
+    # Reviews mention slow response (+1) -- applies to both verticals
+    if review_texts:
+        all_review_text = " ".join(review_texts).lower()
+        if any(kw in all_review_text for kw in _SLOW_RESPONSE_KEYWORDS):
+            score += 1
+            signals.append((1, "reviews mention slow response"))
+
+    score = min(score, 10)
+
+    if score >= 6:
+        priority = "high"
+    elif score >= 3:
+        priority = "medium"
+    else:
+        priority = "low"
+
+    # Build signal string from top signals
+    signals.sort(key=lambda x: x[0], reverse=True)
+    if not signals:
+        signal_str = "no signals detected"
+    else:
+        parts = []
+        total_len = 0
+        for _, desc in signals:
+            if total_len + len(desc) + 2 > 100:
+                break
+            parts.append(desc)
+            total_len += len(desc) + 2
+        signal_str = ", ".join(parts) if parts else signals[0][1][:100]
+
+    return score, priority, signal_str
 
 
 # =============================================================================
@@ -616,7 +831,7 @@ def enrich_one(prospect, circuit_breaker):
 
     # Pass 3
     p3 = places_lookup(name)
-    pass3_ok = any(v is not None for v in p3.values())
+    pass3_ok = any(v is not None for k, v in p3.items() if k != "review_texts")
     if p3["rating"] is not None:
         patch["rating"] = p3["rating"]
     if p3["review_count"] is not None:
@@ -627,6 +842,15 @@ def enrich_one(prospect, circuit_breaker):
         patch["is_operational"] = p3["is_operational"]
     if p3["phone"] and "phone" not in patch and not existing_phone:
         patch["phone"] = p3["phone"]
+
+    # Manual-work scoring (uses Pass 1 HTML + Pass 3 review texts)
+    if pass1_ok or p3["review_texts"]:
+        mw_score, mw_priority, mw_signal = compute_manual_work_score(
+            vertical, p1["html"], pass1_ok, p3["review_texts"]
+        )
+        patch["manual_work_score"] = mw_score
+        patch["manual_work_signal"] = mw_signal
+        patch["priority"] = mw_priority
 
     # Status
     has_data = any(k in patch for k in DATA_FIELDS)
