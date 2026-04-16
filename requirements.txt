@@ -1,0 +1,4 @@
+requests>=2.31,<3
+beautifulsoup4>=4.12,<5
+lxml>=4.9,<6
+anthropic>=0.34,<1
