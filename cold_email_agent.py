@@ -514,6 +514,148 @@ def _to_em_dash(s: str) -> str:
     return s.replace(" -- ", " \u2014 ").replace("-- Franco", "\u2014 Franco")
 
 
+# -- v6.2 Subject Line Generation ---------------------------------------------
+#
+# Cold-outreach subjects. The body cannot perform if the email never opens,
+# so the subject is the highest-leverage decision here.
+#
+# Day 0 (touch=1): bare lowercase cleaned business name ("peel plumbing inc").
+#   Pattern-interrupts the SMB owner's inbox by reading as internal
+#   correspondence rather than templated marketing. Owner-operators have
+#   been trained to ignore "Quick question about X" / "Following up" over
+#   years of spam.
+# Day 4 (touch=2): "did this get buried?" -- no business name, no caps.
+#   Business name absent by design: repeating it makes the follow-up feel
+#   mechanical to the recipient. Lowercase by design: Title Case reads
+#   corporate.
+# Day 11 (touch=3, LinkedIn): no subject -- body-only. Helper raises.
+# Day 14 (touch=4, SMS): no subject -- internal. Helper raises.
+# Loom delivery (separate from the linear touch sequence): "here's that
+#   loom" via dedicated _build_loom_delivery_subject(). See that helper.
+
+
+class BannedSubjectError(ValueError):
+    """Raised when the subject contains an anti-pattern (banned token,
+    all-caps word, emoji, exclamation mark, or thread-faking prefix).
+
+    For Day 0 subjects this can fire if the business name itself contains
+    a banned word (e.g. a business literally called "AI Plumbing"). Such
+    prospects should be surfaced in the run's SMS summary so Franco can
+    hand-craft those one-offs rather than silently skipping them."""
+
+
+# Banned tokens. Word-boundary matched case-insensitively via \b...\b.
+# Never substring-match -- that would incorrectly ban names containing
+# harmless letter sequences like "aid", "said", "daily", or "aire".
+_BANNED_TOKENS = (
+    # AI / automation family
+    "AI", "automation", "automate", "automated",
+    # Generic-tech family
+    "tool", "tools", "software", "system", "solution", "platform",
+    # Growth-hype family
+    "transform", "transformation", "scale", "scaling",
+    "growth", "grow", "10x", "explode",
+    # Templated-opener family
+    "quick question", "following up", "circling back", "touching base",
+    # Urgency manipulation
+    "urgent", "important",
+)
+
+
+def _validate_subject(subject: str) -> None:
+    """Raise BannedSubjectError if the subject hits any anti-pattern.
+
+    Runs as a safety net after every subject build. The current builders
+    (Day 0 bare name, Day 4 fixed string, Loom delivery fixed string)
+    can't produce most of these tokens, but the Day 0 bare-name builder
+    CAN if the business is literally named e.g. "AI Plumbing". Raising
+    loudly there matches the paused-vertical sentinel philosophy from v6
+    -- surface the case to a human rather than ship compromised copy."""
+    if not subject:
+        raise BannedSubjectError("Empty subject")
+
+    # Exclamation points -- no exceptions
+    if "!" in subject:
+        raise BannedSubjectError(f"Subject contains '!': {subject!r}")
+
+    # ALL CAPS words longer than 3 characters. Catches HVAC, HURRY, etc.
+    # Day 0 subjects are lowercased so this is purely defensive.
+    all_caps = re.findall(r"\b[A-Z]{4,}\b", subject)
+    if all_caps:
+        raise BannedSubjectError(
+            f"Subject contains ALL CAPS word(s) {all_caps}: {subject!r}")
+
+    # Emoji / non-text glyph. Em-dash (U+2014) is BELOW 0x2600 so it
+    # passes; curly quotes and ellipsis also pass. 0x2600+ covers the
+    # Miscellaneous Symbols block onward (where hearts, stars, check
+    # marks, and all emoji proper live).
+    for ch in subject:
+        if ord(ch) >= 0x2600:
+            raise BannedSubjectError(
+                f"Subject contains emoji / non-text glyph {ch!r} "
+                f"(U+{ord(ch):04X}): {subject!r}")
+
+    # Banned word-boundary tokens
+    for token in _BANNED_TOKENS:
+        pattern = rf"\b{re.escape(token)}\b"
+        if re.search(pattern, subject, re.IGNORECASE):
+            raise BannedSubjectError(
+                f"Subject contains banned token {token!r}: {subject!r}")
+
+    # Thread-faking prefixes. ':' is a non-word char so \b after it
+    # won't match reliably -- handle these with explicit literals. The
+    # leading \b ensures we don't flag words that happen to contain
+    # "re:" as a substring (none exist in practice, but defensive).
+    if re.search(r"\bRe:", subject, re.IGNORECASE):
+        raise BannedSubjectError(
+            f"Subject uses thread-faking prefix 'Re:': {subject!r}")
+    if re.search(r"\bFwd:", subject, re.IGNORECASE):
+        raise BannedSubjectError(
+            f"Subject uses thread-faking prefix 'Fwd:': {subject!r}")
+
+
+def _build_subject(prospect: dict, touch_number: int) -> str:
+    """Build the subject line for the given touch in the linear follow-up
+    sequence (1=Day 0, 2=Day 4). Touches 3+ have no subject -- LinkedIn
+    is body-only, Day 14 is an internal SMS. Raises for those to force
+    callers to reach for a different helper rather than silently
+    generating a default.
+
+    For the Loom delivery email (which fires on a status trigger, not a
+    time trigger), use _build_loom_delivery_subject() instead. Wedging
+    that into this helper via a synthetic touch_number=4 would confuse
+    touch_count semantics."""
+    if touch_number == 1:
+        subject = _clean_business_name(prospect.get("name") or "").lower()
+    elif touch_number == 2:
+        subject = "did this get buried?"
+    elif touch_number == 3:
+        raise ValueError(
+            "Touch 3 is LinkedIn -- body only, no subject. "
+            "LinkedIn connection requests do not carry a subject field.")
+    elif touch_number == 4:
+        raise ValueError(
+            "Touch 4 is an internal SMS to Franco, not an outbound email. "
+            "No subject applies.")
+    else:
+        raise ValueError(f"No subject defined for touch {touch_number}")
+    _validate_subject(subject)
+    return subject
+
+
+def _build_loom_delivery_subject(prospect: dict) -> str:
+    """Subject for the email delivering the Loom link after a 'yes' reply.
+
+    Kept separate from _build_subject() because this fires on a status
+    trigger (loom_recorded), not on a linear touch-count position. The
+    prospect asked for the Loom -- the subject's job is to confirm "the
+    thing you asked for is here", matching the tone of how a friend would
+    text you a video, not to pattern-interrupt or nudge."""
+    subject = "here's that loom"
+    _validate_subject(subject)
+    return subject
+
+
 def _extract_first_name(owner: str) -> str:
     """Return first token of owner name, stripping titles like 'Dr.' etc."""
     if not owner:
@@ -666,7 +808,11 @@ def _build_email_body(prospect: dict, tier: int, hook: str):
         f"<p>{signoff}</p>\n"
     )
 
-    subject = f"Quick question about {business_name}"
+    # v6.2: bare lowercase cleaned business name. _build_subject calls
+    # _validate_subject internally and raises BannedSubjectError if the
+    # business is named something like "AI Plumbing". Caller decides
+    # whether to skip + log or surface to Franco.
+    subject = _build_subject(prospect, touch_number=1)
     return subject, text, html, to_name
 
 
@@ -738,7 +884,7 @@ def _build_day4_email(prospect: dict):
     return {
         "to_email": prospect.get("email"),
         "to_name": first_name or prospect.get("name", ""),
-        "subject": f"Re: Quick question about {business_name}",
+        "subject": _build_subject(prospect, touch_number=2),
         "body_text": text,
         "body_html": html,
         "touch": 2,
@@ -985,7 +1131,7 @@ def _build_loom_recorded_followup(prospect: dict, loom_link: str):
     return {
         "to_email": prospect.get("email"),
         "to_name": first_name or prospect.get("name", ""),
-        "subject": f"Re: Quick question about {business_name}",
+        "subject": _build_loom_delivery_subject(prospect),
         "body_text": text,
         "body_html": html,
         "loom_link": loom_link,
@@ -1050,7 +1196,16 @@ def _clear_cold_email_queue():
 
 
 def _draft_one(prospect, gmail, dry_run):
-    """Draft a single cold email for a prospect. Returns (ok, tier)."""
+    """Draft a single cold email for a prospect.
+
+    Returns (outcome, tier). Outcome is one of:
+      'ok'              -- draft created
+      'skip'            -- generate_email returned None (missing email,
+                           dead-end domain, paused vertical, etc.)
+      'banned_subject'  -- business name contains a v6.2 banned token;
+                           surfaced in the SMS summary so Franco can
+                           hand-craft the subject line manually.
+    """
     pid = prospect.get("id", "unknown")
     name = prospect.get("name", "Unknown")
     email = prospect.get("email", "")
@@ -1058,9 +1213,14 @@ def _draft_one(prospect, gmail, dry_run):
 
     print(f"\n  Drafting for: {name} ({owner}) -> {email}")
 
-    email_data = generate_email(prospect)
+    try:
+        email_data = generate_email(prospect)
+    except BannedSubjectError as e:
+        print(f"    SKIP (banned subject): {name} ({pid}) -- {e}")
+        return "banned_subject", None
+
     if not email_data:
-        return False, None
+        return "skip", None
 
     # Acceptance sanity check: 4 sentences in body
     # (greeting + hook + observation + loom_offer, sign-off is sentence-level
@@ -1074,7 +1234,7 @@ def _draft_one(prospect, gmail, dry_run):
         print(f"    [DRY RUN] Subject: {email_data['subject']}")
         print(f"    [DRY RUN] Tier: {email_data['tier']}")
         print(f"    [DRY RUN] Body:\n{'-'*60}\n{email_data['body_text']}{'-'*60}")
-        return True, email_data["tier"]
+        return "ok", email_data["tier"]
 
     gmail_ok = False
     if gmail:
@@ -1098,7 +1258,7 @@ def _draft_one(prospect, gmail, dry_run):
 
     print(f"    Tier {email_data['tier']} -- saved to "
           f"{'Gmail+queue' if gmail_ok else 'queue only'}")
-    return True, email_data["tier"]
+    return "ok", email_data["tier"]
 
 
 def run_draft(max_drafts=50, dry_run=False, redraft=False):
@@ -1131,6 +1291,7 @@ def run_draft(max_drafts=50, dry_run=False, redraft=False):
 
     counts = {"high": 0, "medium": 0, "tier1": 0, "tier2": 0, "tier3": 0}
     drafted = 0
+    banned_subject_skips = 0  # v6.2: businesses whose name tripped the validator
 
     # Priority-ordered: high first, medium second, low skipped
     for priority in ("high", "medium"):
@@ -1145,8 +1306,11 @@ def run_draft(max_drafts=50, dry_run=False, redraft=False):
             if drafted >= max_drafts:
                 print(f"\n  DAILY CAP REACHED: {drafted} drafts")
                 break
-            ok, tier = _draft_one(prospect, gmail, dry_run)
-            if not ok:
+            outcome, tier = _draft_one(prospect, gmail, dry_run)
+            if outcome == "banned_subject":
+                banned_subject_skips += 1
+                continue
+            if outcome != "ok":
                 continue
             drafted += 1
             counts[priority] += 1
@@ -1164,6 +1328,9 @@ def run_draft(max_drafts=50, dry_run=False, redraft=False):
     print(f"  Medium drafts        : {counts['medium']}")
     print(f"  Tier distribution    : T1={counts['tier1']} "
           f"T2={counts['tier2']} T3={counts['tier3']}")
+    if banned_subject_skips:
+        print(f"  Banned-subject skips : {banned_subject_skips} "
+              f"(see logs; subject needs manual handling)")
     print("=" * 60)
 
     if drafted > 0:
@@ -1174,6 +1341,10 @@ def run_draft(max_drafts=50, dry_run=False, redraft=False):
         )
     else:
         msg = f"Unify: 0 new drafts this run. All priority prospects already drafted."
+
+    if banned_subject_skips:
+        msg += (f" {banned_subject_skips} prospect(s) skipped due to "
+                f"banned-token in business name (see logs).")
 
     if not dry_run:
         send_sms(msg)
@@ -1314,6 +1485,94 @@ def _self_test():
     assert "Took a look at your site" in e["body_text"]
     assert "I poked around" not in e["body_text"]
     assert "looks like it still" not in e["body_text"]
+
+    # v6.2: subject line generation ------------------------------------------
+    print("  [self-test] v6.2 Day-0 subject is bare lowercase business name")
+    # Inc. -- period stripped
+    s = _build_subject({"name": "Peel Plumbing Inc."}, 1)
+    assert s == "peel plumbing inc", f"Expected 'peel plumbing inc', got {s!r}"
+    # Co. -- period preserved
+    s = _build_subject({"name": "Oakridge Smile Co."}, 1)
+    assert s == "oakridge smile co.", f"Expected 'oakridge smile co.', got {s!r}"
+    # Ltd. -- period preserved
+    s = _build_subject({"name": "Hartman Dental Ltd."}, 1)
+    assert s == "hartman dental ltd.", f"Expected 'hartman dental ltd.', got {s!r}"
+    # LLC. -- period stripped
+    s = _build_subject({"name": "Smith LLC."}, 1)
+    assert s == "smith llc", f"Expected 'smith llc', got {s!r}"
+    # Plain name
+    s = _build_subject({"name": "Aire One Heating & Cooling"}, 1)
+    assert s == "aire one heating & cooling"
+
+    print("  [self-test] v6.2 Day-4 subject is the fixed nudge")
+    s = _build_subject({"name": "Anything"}, 2)
+    assert s == "did this get buried?"
+
+    print("  [self-test] v6.2 touch>=3 raises (LinkedIn and SMS have no subject)")
+    for t in (3, 4, 5):
+        try:
+            _build_subject({"name": "X"}, t)
+            raise AssertionError(f"Expected ValueError for touch {t}")
+        except ValueError:
+            pass  # expected
+
+    print("  [self-test] v6.2 Loom delivery subject is dedicated path")
+    assert _build_loom_delivery_subject({"name": "X"}) == "here's that loom"
+
+    print("  [self-test] v6.2 validator uses word boundaries, not substring")
+    # 'aid', 'said', 'daily', 'aire', 'main' must all pass -- they contain
+    # the letter pair 'ai' but are not the banned word 'AI'.
+    _validate_subject("aid station")
+    _validate_subject("said and done")
+    _validate_subject("daily grind")
+    _validate_subject("aire one heating")   # 'aire' contains 'ai' as prefix
+    _validate_subject("main street dental")  # 'main' contains 'ai'
+    # But standalone AI (case-insensitive) must be caught
+    for banned in ("AI plumbing", "ai plumbing", "the AI shop", "automation station",
+                   "grow your business", "quick question about X",
+                   "following up tomorrow", "touching base", "re: something",
+                   "Re: something", "Fwd: heads up", "urgent update",
+                   "GREAT deal", "hello!"):
+        try:
+            _validate_subject(banned)
+            raise AssertionError(f"Expected banned: {banned!r}")
+        except BannedSubjectError:
+            pass  # expected
+
+    print("  [self-test] v6.2 validator catches emoji / non-text glyphs")
+    # Em-dash (U+2014) and curly quotes must PASS -- they're valid typography
+    _validate_subject("something \u2014 else")  # em-dash
+    _validate_subject("it\u2019s fine")         # right single quote
+    # But emoji must be caught
+    for emoji in ("hi \U0001F389", "heart \u2764", "check \u2705", "star \u2605"):
+        try:
+            _validate_subject(emoji)
+            raise AssertionError(f"Expected emoji rejection: {emoji!r}")
+        except BannedSubjectError:
+            pass
+
+    print("  [self-test] v6.2 end-to-end: generate_email Day-0 subject is bare")
+    p = {"name":"Peel Plumbing Inc.","cat":"Trades","email":"x@y.com",
+         "owner_name":"Matt Rossi","rating":4.9,"review_count":126}
+    e = generate_email(p)
+    assert e["subject"] == "peel plumbing inc", \
+        f"Day-0 subject from generate_email should be bare lowercase, got {e['subject']!r}"
+
+    print("  [self-test] v6.2 end-to-end: Day-4 email carries 'did this get buried?'")
+    d4 = _build_day4_email(p)
+    assert d4["subject"] == "did this get buried?"
+
+    print("  [self-test] v6.2 end-to-end: Loom delivery carries 'here's that loom'")
+    lrf = _build_loom_recorded_followup(p, "https://loom.example/abc")
+    assert lrf["subject"] == "here's that loom"
+
+    print("  [self-test] v6.2 business names that ARE banned words raise")
+    # Real-world edge case: business literally called "AI Plumbing"
+    try:
+        _build_subject({"name": "AI Plumbing"}, 1)
+        raise AssertionError("Expected BannedSubjectError for 'AI Plumbing'")
+    except BannedSubjectError:
+        pass  # expected
 
     print("  [self-test] ALL TESTS PASSED")
 
