@@ -164,6 +164,78 @@ def _is_dead_end_email(email):
 
 
 # =============================================================================
+# PLACEHOLDER / TEMPLATE EMAIL BLOCKLIST (added 2026-04-20)
+# -----------------------------------------------------------------------------
+# Catches template values that slip through html_regex / text_regex strategies.
+# Real-world examples seen in the 2026-04-20 partial backfill:
+#   - example@mysite.com  (Wix placeholder, appeared on 2 prospects' sites)
+#   - your@email.com / user@domain.com  (template comments)
+# RFC 2606 reserves example.{com,org,net} as non-routable placeholder domains.
+# =============================================================================
+
+PLACEHOLDER_EMAILS = {
+    "example@mysite.com", "example@example.com",
+    "email@email.com", "test@test.com", "test@example.com",
+    "admin@admin.com",
+    "your@email.com", "your.email@email.com",
+    "user@domain.com", "name@domain.com", "name@example.com",
+    "firstname@lastname.com", "first.last@company.com",
+}
+
+PLACEHOLDER_DOMAINS = {
+    # RFC 2606 reserved test domains
+    "example.com", "example.org", "example.net",
+    # Common placeholder domains on Wix / Squarespace / template sites
+    "yourdomain.com", "yoursite.com", "yourcompany.com", "yourbusiness.com",
+    "mysite.com",
+}
+
+PLACEHOLDER_LOCAL_PREFIXES = {
+    "example", "your.email", "firstname.lastname",
+}
+
+
+def _is_placeholder_email(email):
+    """Return True if this looks like a template/placeholder email that
+    should never be written to a prospect record."""
+    e = (email or "").strip().lower()
+    if not e or "@" not in e:
+        return False
+    if e in PLACEHOLDER_EMAILS:
+        return True
+    local, _, domain = e.partition("@")
+    if domain in PLACEHOLDER_DOMAINS:
+        return True
+    if any(domain.endswith("." + d) for d in PLACEHOLDER_DOMAINS):
+        return True
+    if local in PLACEHOLDER_LOCAL_PREFIXES:
+        return True
+    return False
+
+
+# =============================================================================
+# TRUSTED FREE-EMAIL PROVIDERS (added 2026-04-20)
+# -----------------------------------------------------------------------------
+# html_regex hits on unknown domains are too often false positives (font CDNs,
+# third-party scripts, CSS comments). When the extracted email's domain does
+# NOT match the business website, only accept it if it's a common free-email
+# provider -- a real business email pattern.
+# =============================================================================
+
+TRUSTED_FREE_EMAIL_DOMAINS = {
+    "gmail.com", "googlemail.com",
+    "yahoo.com", "yahoo.ca", "yahoo.co.uk",
+    "outlook.com", "hotmail.com", "live.com", "live.ca", "msn.com",
+    "icloud.com", "me.com", "mac.com",
+}
+
+
+def _is_trusted_free_email(email):
+    domain = (email or "").partition("@")[2].lower()
+    return domain in TRUSTED_FREE_EMAIL_DOMAINS
+
+
+# =============================================================================
 # MULTI-STRATEGY EMAIL EXTRACTION
 # =============================================================================
 
@@ -231,6 +303,8 @@ def _extract_emails_from_html(html, business_domain=None):
                     continue
                 if _is_dead_end_email(candidate):
                     continue
+                if _is_placeholder_email(candidate):
+                    continue
                 results.append(("mailto", candidate))
 
     # Strategy 2: jsonld
@@ -252,6 +326,8 @@ def _extract_emails_from_html(html, business_domain=None):
                     continue
                 if _is_dead_end_email(cand):
                     continue
+                if _is_placeholder_email(cand):
+                    continue
                 results.append(("jsonld", cand))
 
     # Strategy 3: text_regex
@@ -260,6 +336,8 @@ def _extract_emails_from_html(html, business_domain=None):
         for m in _EMAIL_REGEX.finditer(text):
             cand = m.group(0).strip().lower()
             if _is_dead_end_email(cand):
+                continue
+            if _is_placeholder_email(cand):
                 continue
             if not _email_passes_noise_filter(cand):
                 continue
@@ -272,6 +350,8 @@ def _extract_emails_from_html(html, business_domain=None):
         if cand in seen_so_far:
             continue
         if _is_dead_end_email(cand):
+            continue
+        if _is_placeholder_email(cand):
             continue
         if not _email_passes_noise_filter(cand):
             continue
@@ -311,6 +391,8 @@ def _extract_emails_from_html(html, business_domain=None):
                 continue
             if _is_dead_end_email(cand):
                 continue
+            if _is_placeholder_email(cand):
+                continue
             if not _email_passes_noise_filter(cand):
                 continue
             results.append(("obfuscated", cand))
@@ -321,6 +403,8 @@ def _extract_emails_from_html(html, business_domain=None):
         if cand in seen_so_far:
             continue
         if _is_dead_end_email(cand):
+            continue
+        if _is_placeholder_email(cand):
             continue
         if not _email_passes_noise_filter(cand):
             continue
@@ -364,10 +448,21 @@ def get_prospects_to_enrich(max_prospects=100, prospect_id=None, backfill=False)
             f"&limit={max_prospects}"
         )
     else:
+        # Cron selector (widened 2026-04-20): include prospects that still have
+        # no email regardless of enriched_at. Without this clause, prospects
+        # whose enrichment ran recently but didn't recover an email would be
+        # locked out of re-processing for 30 days, which means fixes to the
+        # extraction pipeline don't reach them until a month later.
+        # Same OR-predicate as backfill mode: one source of truth for
+        # "empty email."
+        # Tradeoff: permanently-hopeless prospects (dead DNS, no Places match)
+        # will be retried on every cron. Budget-safe at current volume; add a
+        # cooldown clause if the tail grows.
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         url = (
             f"{SUPABASE_URL}/rest/v1/prospects"
-            f"?or=(enriched_at.is.null,enriched_at.lt.{quote(cutoff)})"
+            f"?or=(enriched_at.is.null,enriched_at.lt.{quote(cutoff)},"
+            f"email.is.null,email.eq.)"
             f"&order=created_at.asc"
             f"&limit={max_prospects}"
         )
@@ -383,7 +478,9 @@ def update_prospect_enrichment(prospect_id, fields):
 
 
 def _insert_enrichment_run(row):
-    """Best-effort insert into enrichment_runs telemetry table."""
+    """Best-effort insert into enrichment_runs telemetry table.
+    Returns the inserted row's id (UUID string) or None on failure.
+    """
     try:
         resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/enrichment_runs",
@@ -392,8 +489,34 @@ def _insert_enrichment_run(row):
             timeout=15,
         )
         resp.raise_for_status()
+        body = resp.json()
+        if isinstance(body, list) and body:
+            return body[0].get("id")
+        if isinstance(body, dict):
+            return body.get("id")
     except Exception as e:
         print(f"WARN: could not insert enrichment_runs row: {e}")
+    return None
+
+
+def _update_enrichment_run(row_id, fields):
+    """Best-effort PATCH of an existing enrichment_runs row.
+    Used to flip a 'starting' row to final metrics at end of run. Survives
+    workflow cancellation: if the agent is killed before this call, the
+    starting row remains with duration_seconds=NULL and canary_pass=FALSE,
+    making the kill visible in telemetry."""
+    if not row_id:
+        return
+    try:
+        resp = requests.patch(
+            f"{SUPABASE_URL}/rest/v1/enrichment_runs?id=eq.{quote(row_id)}",
+            headers=sb_headers(),
+            json=fields,
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"WARN: could not update enrichment_runs row {row_id}: {e}")
 
 
 # =============================================================================
@@ -604,7 +727,16 @@ def _select_best_email(candidates, business_domain):
       (a) mailto AND email-domain matches business-domain
       (b) any strategy AND email-domain matches business-domain
       (c) mailto on any domain
-      (d) any strategy on any non-DEAD-END domain
+      (d) any non-html_regex strategy on any non-DEAD-END domain
+      (e) html_regex ONLY if email-domain is a trusted free provider
+          (gmail/yahoo/outlook/hotmail/icloud)
+
+    Rationale for (d) vs (e): html_regex scans raw HTML including CSS
+    comments, font-license blobs, and inline-script bodies. Seen in the
+    2026-04-20 partial backfill: info@indiantypefoundry.com (font CDN)
+    extracted from a legitimate business site. Limiting unmatched-domain
+    html_regex hits to known free-email providers avoids that class of
+    false positive.
     """
     bd = (business_domain or "").lower().lstrip(".")
 
@@ -622,6 +754,7 @@ def _select_best_email(candidates, business_domain):
     b_bucket = []
     c_bucket = []
     d_bucket = []
+    e_bucket = []
     for strategy, email, src in candidates:
         dm = domain_matches(email)
         if strategy == "mailto" and dm:
@@ -630,10 +763,15 @@ def _select_best_email(candidates, business_domain):
             b_bucket.append((strategy, email, src))
         elif strategy == "mailto":
             c_bucket.append((strategy, email, src))
+        elif strategy == "html_regex":
+            # Gated: only accept if domain is a trusted free provider
+            if _is_trusted_free_email(email):
+                e_bucket.append((strategy, email, src))
+            # else: silently dropped as likely false positive
         else:
             d_bucket.append((strategy, email, src))
 
-    for bucket in (a_bucket, b_bucket, c_bucket, d_bucket):
+    for bucket in (a_bucket, b_bucket, c_bucket, d_bucket, e_bucket):
         if bucket:
             s, e, src = bucket[0]
             return e, s, src
@@ -1026,22 +1164,54 @@ def _sanity_check_places_result(prospect, formatted_address, places_phone):
     """
     Return (passed: bool, reason: str). Checks whether Places result matches
     prospect's city (from prospect.address) OR area code (from prospect.phone).
+
+    City extraction has to survive the wild CRM address format produced by
+    the YP sourcer, which looks like:
+        "100 Saint Regis Crescent,North York,ONM3J 1Y8Get directions"
+    Note:
+      - No space between comma and next token (already handled by split+strip)
+      - "ON" glued to postal code (ONM3J) -- defeats plain postal regex
+      - "Get directions" / "View all add" / similar YP trailing junk
+    This v8 parser strips those before tokenizing.
     """
     addr = prospect.get("address") or ""
+
+    # Pre-clean: strip known YP / directory trailing junk
+    addr = re.sub(
+        r"\b(Get\s+directions|View\s+all[\w\s]*|View\s+on\s+map|Directions)\b.*$",
+        "",
+        addr,
+        flags=re.IGNORECASE,
+    ).strip()
+    # Split "ON" glued to a postal prefix: "ONM3J" -> "ON M3J"
+    addr = re.sub(r"\b([Oo][Nn])([A-Za-z]\d[A-Za-z])", r"\1 \2", addr)
+
     tokens = [t.strip() for t in addr.split(",") if t.strip()]
 
-    def _is_postal(tok):
-        # Canadian postal: "L6T 3X1" / "L6T3X1" etc
-        return bool(re.fullmatch(r"[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d", tok.strip()))
+    def _looks_like_postal(tok):
+        # Canadian postal pattern, embedded anywhere in the token.
+        # "M3J 1Y8" / "M3J1Y8" / "ON M3J 1Y8" all match.
+        return bool(re.search(r"[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d", tok))
 
     def _is_province(tok):
         return tok.strip().lower() in ("on", "ontario")
 
+    def _has_too_little_signal(tok):
+        # Filter tokens that are empty or lack at least 3 alphanumeric chars
+        cleaned = re.sub(r"[^\w]", "", tok).strip()
+        return len(cleaned) < 3
+
     prospect_city = None
-    # Work backwards: last token is likely postal or province, skip those
-    filtered = [t for t in tokens if not _is_postal(t) and not _is_province(t)]
+    filtered = [
+        t for t in tokens
+        if not _looks_like_postal(t)
+        and not _is_province(t)
+        and not _has_too_little_signal(t)
+    ]
     if filtered:
-        # Pick the last remaining non-empty token, which is usually the city
+        # Pick the LAST remaining token -- Canadian address order is
+        # "street, city, province postal", so after stripping province + postal
+        # the last survivor is the city (or, if no city given, the street).
         prospect_city = filtered[-1].lower()
 
     fa_lower = (formatted_address or "").lower()
@@ -1531,20 +1701,31 @@ def run(max_prospects=100, dry_run=False, prospect_id=None, backfill=False):
         max_prospects=max_prospects, prospect_id=prospect_id, backfill=backfill,
     )
     print(f"Fetched {len(prospects)} prospect(s) to enrich")
+
+    # Insert a STARTING row early so telemetry survives workflow cancellation.
+    # If the agent is killed before the final PATCH, this row remains with
+    # duration_seconds=NULL, making the kill visible in telemetry.
+    # We PATCH this row at the end with real metrics.
+    run_row_id = _insert_enrichment_run({
+        "trigger": trigger,
+        "duration_seconds": None,
+        "total_scanned": len(prospects),
+        "emails_found": 0,
+        "emails_already_present": 0,
+        "websites_discovered": 0,
+        "websites_rejected_sanity": 0,
+        "per_strategy": {},
+        "per_vertical": {},
+        "canary_pass": canary_pass,
+        "canary_failures": [{"name": n, "reason": r} for n, r in canary_failures] if canary_failures else None,
+    })
+    if run_row_id:
+        print(f"enrichment_runs starting row id: {run_row_id}")
+
     if not prospects:
         send_sms("Unify enrichment: 0 processed, 0 owners, 0 reviews, 0 failed.")
-        _insert_enrichment_run({
-            "trigger": trigger,
+        _update_enrichment_run(run_row_id, {
             "duration_seconds": int(time.time() - run_start),
-            "total_scanned": 0,
-            "emails_found": 0,
-            "emails_already_present": 0,
-            "websites_discovered": 0,
-            "websites_rejected_sanity": 0,
-            "per_strategy": {},
-            "per_vertical": {},
-            "canary_pass": canary_pass,
-            "canary_failures": [{"name": n, "reason": r} for n, r in canary_failures] if canary_failures else None,
         })
         return
 
@@ -1627,9 +1808,10 @@ def run(max_prospects=100, dry_run=False, prospect_id=None, backfill=False):
     duration = int(time.time() - run_start)
     hit_rate = 100.0 * metrics["emails_found"] / metrics["total_scanned"] if metrics["total_scanned"] else 0.0
 
-    # Log run row
-    _insert_enrichment_run({
-        "trigger": trigger,
+    # Flip the starting row to final metrics (PATCH, not INSERT). If the
+    # agent was killed between the starting INSERT and this PATCH, the row
+    # remains with duration_seconds=NULL -- that's the cancellation signal.
+    _update_enrichment_run(run_row_id, {
         "duration_seconds": duration,
         "total_scanned": metrics["total_scanned"],
         "emails_found": metrics["emails_found"],
@@ -1638,8 +1820,6 @@ def run(max_prospects=100, dry_run=False, prospect_id=None, backfill=False):
         "websites_rejected_sanity": metrics["websites_rejected_sanity"],
         "per_strategy": dict(metrics["per_strategy"]),
         "per_vertical": {k: dict(v) for k, v in metrics["per_vertical"].items()},
-        "canary_pass": canary_pass,
-        "canary_failures": [{"name": n_, "reason": r_} for n_, r_ in canary_failures] if canary_failures else None,
     })
 
     # SMS summary
