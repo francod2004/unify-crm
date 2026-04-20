@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Unify Enrichment Agent v2
+Unify Enrichment Agent v3
 
 Three passes per prospect:
-  Pass 1: homepage -> email, phone, owner hint, internal links
+  Pass 1: homepage + contact/booking subpages -> email, phone, owner hint,
+          internal links (multi-strategy email extraction: mailto / jsonld /
+          text regex / html regex / obfuscated)
   Pass 2: About Us / Our Team / Meet-the-Doctor page -> owner name
           (regex + Haiku fallback), years in business, 500-char snippet,
           dental/medical credentials
   Pass 3: Google Places API (New) -> rating, review count, hours,
-          operational status, phone
+          operational status, phone, formatted address, website URI
+          (used as fallback when prospect has no website)
 
 Parallelism: ThreadPoolExecutor(max_workers=4). 5-10 s randomized sleep
 between prospect completions so ubuntu-latest runners don't look like bots.
@@ -17,6 +20,9 @@ Circuit breaker: 3 consecutive Pass 2 failures of the same kind
 (timeout / 403 / 429) pauses Pass 2 for the rest of the run. Passes 1 and 3
 keep going.
 
+Canaries: 5 hardcoded live-verified businesses run before every batch. If
+2+ fail, abort. If 1 fails, warn via SMS but continue.
+
 Required env vars:
   SUPABASE_URL, SUPABASE_KEY
   TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM, FRANCO_PHONE
@@ -24,12 +30,14 @@ Required env vars:
 """
 
 import argparse
+import json
 import os
 import random
 import re
 import sys
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urljoin, urlparse
@@ -76,7 +84,37 @@ USER_AGENT = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 REQ_HEADERS = {"User-Agent": USER_AGENT, "Accept-Language": "en-CA,en;q=0.9"}
-REQ_TIMEOUT = 10
+REQ_TIMEOUT = 20
+
+UAS = [
+    USER_AGENT,  # existing Chrome/124
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+]
+
+CONTACT_URL_PATTERNS = [
+    "/contact", "/contact-us", "/contact_us", "/contacts",
+    "/get-in-touch", "/reach-us",
+    "/book", "/booking", "/bookings", "/book-online", "/book-now",
+    "/appointment", "/appointments", "/request-appointment",
+]
+
+# Tracking/analytics email fragments to filter out (noise in html regex)
+TRACKING_EMAIL_NEEDLES = [
+    "sentry", "wixpress", "wix.com", "intercom",
+    "googletagmanager", "doubleclick",
+]
+
+# Canary tests -- must be hardcoded, live-verified as of 2026-04-20
+# Each tuple: (business_name, expected_website_domain_fragment, expected_email)
+# websiteUri match is substring; email match is EXACT (Franco's explicit rule).
+CANARIES = [
+    ("Drain King Plumbers",              "drainkingplumbers.ca",         "info@drainkingplumbers.ca"),
+    ("Fairview Mall Dental Centre",      "fairviewmalldentalcentre.com", "info@fairviewmalldentalcentre.com"),
+    ("Cynthia's Chinese Restaurant",     "cynthiaschinese.com",          "info@cynthiaschinese.com"),
+    ("Work Of Art Barber Shop",          "workofartbarber.ca",           "workofartbarbershop@gmail.com"),
+    ("Durham Autocare",                  "durhamautocare.ca",            "durhamautocare@gmail.com"),
+]
 
 ABOUT_URL_PATTERNS = [
     "/about", "/about-us", "/about_us", "/our-team", "/our_team", "/team",
@@ -126,6 +164,175 @@ def _is_dead_end_email(email):
 
 
 # =============================================================================
+# MULTI-STRATEGY EMAIL EXTRACTION
+# =============================================================================
+
+_EMAIL_REGEX = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+
+
+def _email_passes_noise_filter(email):
+    """Reject emails whose local-part is too long or contains tracking fragments."""
+    e = (email or "").strip().lower()
+    if not e or "@" not in e:
+        return False
+    local, _, domain = e.partition("@")
+    if len(local) > 30:
+        return False
+    if any(needle in e for needle in TRACKING_EMAIL_NEEDLES):
+        return False
+    return True
+
+
+def _walk_jsonld_for_emails(node, out):
+    """Recursively walk a parsed JSON-LD structure collecting values under any
+    key named 'email' (case-insensitive)."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(k, str) and k.lower() == "email":
+                if isinstance(v, str):
+                    out.append(v.strip())
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, str):
+                            out.append(item.strip())
+                        else:
+                            _walk_jsonld_for_emails(item, out)
+            else:
+                _walk_jsonld_for_emails(v, out)
+    elif isinstance(node, list):
+        for item in node:
+            _walk_jsonld_for_emails(item, out)
+
+
+def _extract_emails_from_html(html, business_domain=None):
+    """
+    Returns list[tuple[str, str]] of (strategy_name, email_lowercased).
+    Strategies run in order: mailto, jsonld, text_regex, html_regex, obfuscated.
+    DEAD_END emails are skipped. Noise-filter (length + tracking needles) is
+    applied to regex-based strategies. Caller dedupes; we preserve order and
+    do NOT dedupe across strategies (so domain-preference logic can see all).
+    """
+    results = []
+    if not html:
+        return results
+
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        soup = None
+
+    # Strategy 1: mailto
+    if soup is not None:
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if href.lower().startswith("mailto:"):
+                candidate = href[7:].split("?")[0].strip().lower()
+                if "@" not in candidate:
+                    continue
+                if _is_dead_end_email(candidate):
+                    continue
+                results.append(("mailto", candidate))
+
+    # Strategy 2: jsonld
+    if soup is not None:
+        for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+            raw = script.string or script.get_text() or ""
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                continue
+            collected = []
+            _walk_jsonld_for_emails(parsed, collected)
+            for cand in collected:
+                cand = (cand or "").strip().lower()
+                if "@" not in cand:
+                    continue
+                if _is_dead_end_email(cand):
+                    continue
+                results.append(("jsonld", cand))
+
+    # Strategy 3: text_regex
+    if soup is not None:
+        text = soup.get_text(" ", strip=True)
+        for m in _EMAIL_REGEX.finditer(text):
+            cand = m.group(0).strip().lower()
+            if _is_dead_end_email(cand):
+                continue
+            if not _email_passes_noise_filter(cand):
+                continue
+            results.append(("text_regex", cand))
+
+    # Strategy 4: html_regex (raw HTML -- catches attributes, inline scripts)
+    seen_so_far = {e for _, e in results}
+    for m in _EMAIL_REGEX.finditer(html):
+        cand = m.group(0).strip().lower()
+        if cand in seen_so_far:
+            continue
+        if _is_dead_end_email(cand):
+            continue
+        if not _email_passes_noise_filter(cand):
+            continue
+        results.append(("html_regex", cand))
+
+    # Strategy 5: obfuscated
+    decoded = html
+    decoded = decoded.replace("&#64;", "@").replace("&commat;", "@").replace("&#x40;", "@")
+    # Patterns like "name [at] domain [dot] com" or "name(at)domain(dot)com"
+    patterns = [
+        re.compile(
+            r"([A-Za-z0-9._%+\-]+)\s*(?:\[at\]|\(at\))\s*([A-Za-z0-9.\-]+)\s*"
+            r"(?:\[dot\]|\(dot\))\s*([A-Za-z]{2,})",
+            re.I,
+        ),
+        re.compile(
+            r"([A-Za-z0-9._%+\-]+)\s*(?:\s+at\s+)\s*([A-Za-z0-9.\-]+)"
+            r"\s+(?:dot)\s+([A-Za-z]{2,})",
+            re.I,
+        ),
+    ]
+    seen_so_far = {e for _, e in results}
+    for pat in patterns:
+        for m in pat.finditer(html):
+            try:
+                local = m.group(1).strip()
+                domain = m.group(2).strip()
+                tld = m.group(3).strip()
+            except (IndexError, AttributeError):
+                continue
+            if not local or not domain or not tld:
+                continue
+            cand = f"{local}@{domain}.{tld}".lower()
+            if not _EMAIL_REGEX.fullmatch(cand):
+                continue
+            if cand in seen_so_far:
+                continue
+            if _is_dead_end_email(cand):
+                continue
+            if not _email_passes_noise_filter(cand):
+                continue
+            results.append(("obfuscated", cand))
+            seen_so_far.add(cand)
+    # Also scan the entity-decoded HTML for normal-looking emails we might have missed
+    for m in _EMAIL_REGEX.finditer(decoded):
+        cand = m.group(0).strip().lower()
+        if cand in seen_so_far:
+            continue
+        if _is_dead_end_email(cand):
+            continue
+        if not _email_passes_noise_filter(cand):
+            continue
+        # Only count as obfuscated if the original HTML didn't already surface it
+        if cand not in html.lower():
+            results.append(("obfuscated", cand))
+            seen_so_far.add(cand)
+
+    return results
+
+
+# =============================================================================
 # SUPABASE
 # =============================================================================
 
@@ -138,13 +345,24 @@ def sb_headers():
     }
 
 
-def get_prospects_to_enrich(max_prospects=100, prospect_id=None):
+def get_prospects_to_enrich(max_prospects=100, prospect_id=None, backfill=False):
     """
     Fetch prospects where enriched_at is NULL or older than 30 days.
     If prospect_id is provided, fetch only that row.
+    If backfill is True, pick prospects where email IS NULL or email='',
+    regardless of enriched_at.
     """
     if prospect_id:
         url = f"{SUPABASE_URL}/rest/v1/prospects?id=eq.{quote(prospect_id)}"
+    elif backfill:
+        # Match both empty string and true NULL in case any slip through.
+        # PostgREST OR-combinator: "email IS NULL OR email = ''"
+        url = (
+            f"{SUPABASE_URL}/rest/v1/prospects"
+            f"?or=(email.is.null,email.eq.)"
+            f"&order=created_at.asc"
+            f"&limit={max_prospects}"
+        )
     else:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         url = (
@@ -162,6 +380,20 @@ def update_prospect_enrichment(prospect_id, fields):
     url = f"{SUPABASE_URL}/rest/v1/prospects?id=eq.{quote(prospect_id)}"
     resp = requests.patch(url, headers=sb_headers(), json=fields, timeout=30)
     resp.raise_for_status()
+
+
+def _insert_enrichment_run(row):
+    """Best-effort insert into enrichment_runs telemetry table."""
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/enrichment_runs",
+            headers=sb_headers(),
+            json=row,
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"WARN: could not insert enrichment_runs row: {e}")
 
 
 # =============================================================================
@@ -184,7 +416,7 @@ def send_sms(body):
 
 
 # =============================================================================
-# PASS 1 -- HOMEPAGE FETCH
+# FETCH HELPERS
 # =============================================================================
 
 _HOMEPAGE_OWNER_RE = re.compile(
@@ -201,88 +433,327 @@ def _classify_http_error(status):
     return "other"
 
 
+def _build_req_headers():
+    """Rotate User-Agent per request, add Accept header."""
+    return {
+        "User-Agent": random.choice(UAS),
+        "Accept-Language": "en-CA,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+
+def _fetch_with_retry(url, timeout=REQ_TIMEOUT):
+    """
+    One attempt. On timeout or status >= 500: sleep 30 s, retry once.
+    Returns dict: {status, html, error_kind}. error_kind is None on success.
+    """
+    def _try_once():
+        try:
+            resp = requests.get(
+                url,
+                headers=_build_req_headers(),
+                timeout=timeout,
+                allow_redirects=True,
+            )
+            return {"status": resp.status_code, "html": resp.text or "", "error_kind": None, "exception": None}
+        except requests.Timeout:
+            return {"status": None, "html": None, "error_kind": "timeout", "exception": "timeout"}
+        except Exception as e:
+            return {"status": None, "html": None, "error_kind": "other", "exception": str(e)[:60]}
+
+    out = _try_once()
+    # Success
+    if out["error_kind"] is None and out["status"] is not None and out["status"] < 500:
+        if out["status"] >= 400:
+            out["error_kind"] = _classify_http_error(out["status"])
+        return out
+    # Retry path
+    if out["error_kind"] == "timeout" or (out["status"] is not None and out["status"] >= 500):
+        time.sleep(30)
+        out2 = _try_once()
+        if out2["error_kind"] is None and out2["status"] is not None:
+            if out2["status"] >= 400:
+                out2["error_kind"] = _classify_http_error(out2["status"])
+        return out2
+    # Other error (e.g. DNS) -- one shot only
+    return out
+
+
+def _fetch_site_pages(homepage_url):
+    """
+    Fetch homepage + up to 4 contact/booking subpages on the same netloc.
+
+    Returns:
+      {
+        "pages": [{"url", "suffix", "status", "html"}, ...],
+        "error_kind": None | "timeout" | "403" | "429" | "other",
+      }
+    error_kind is set from the HOMEPAGE fetch only. Subpage errors are silent.
+    """
+    result = {"pages": [], "error_kind": None}
+    if not homepage_url:
+        result["error_kind"] = "other"
+        return result
+
+    # Homepage first
+    hp = _fetch_with_retry(homepage_url)
+    if hp["error_kind"] is not None:
+        result["error_kind"] = hp["error_kind"]
+        return result
+
+    homepage_html = hp["html"] or ""
+    result["pages"].append({
+        "url": homepage_url,
+        "suffix": "/",
+        "status": hp["status"],
+        "html": homepage_html,
+    })
+
+    base_netloc = urlparse(homepage_url).netloc.lower()
+
+    # 1) Discover subpage URLs from homepage links matching CONTACT_URL_PATTERNS
+    discovered = []
+    seen_urls = {homepage_url.rstrip("/").lower()}
+    try:
+        soup = BeautifulSoup(homepage_html, "lxml")
+    except Exception:
+        soup = None
+
+    if soup is not None:
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href or href.startswith("#"):
+                continue
+            if href.lower().startswith(("mailto:", "tel:")):
+                continue
+            full = urljoin(homepage_url, href)
+            parsed = urlparse(full)
+            if not parsed.scheme.startswith("http"):
+                continue
+            if parsed.netloc and parsed.netloc.lower() != base_netloc:
+                continue
+            full_norm = full.rstrip("/").lower()
+            if full_norm in seen_urls:
+                continue
+            path_lower = (parsed.path or "").rstrip("/").lower() or "/"
+            anchor_text = a.get_text(" ", strip=True).lower()
+            # Match if path hits a contact pattern, or href/anchor text mentions a keyword
+            keyword_hit = False
+            for pat in CONTACT_URL_PATTERNS:
+                if path_lower == pat or path_lower.endswith(pat):
+                    keyword_hit = True
+                    break
+                tail = pat.lstrip("/")
+                if tail and (tail in href.lower() or tail in anchor_text):
+                    keyword_hit = True
+                    break
+            if not keyword_hit:
+                continue
+            discovered.append(full)
+            seen_urls.add(full_norm)
+
+    # 2) Also try hardcoded paths even if not linked
+    parsed_home = urlparse(homepage_url)
+    scheme = parsed_home.scheme or "https"
+    for pat in CONTACT_URL_PATTERNS:
+        guess = f"{scheme}://{base_netloc}{pat}"
+        guess_norm = guess.rstrip("/").lower()
+        if guess_norm in seen_urls:
+            continue
+        discovered.append(guess)
+        seen_urls.add(guess_norm)
+
+    # 3) Cap at 4 subpages (5 total including homepage)
+    homepage_len = len(homepage_html)
+    for sub_url in discovered:
+        if len(result["pages"]) >= 5:
+            break
+        time.sleep(2)
+        sub = _fetch_with_retry(sub_url)
+        if sub["error_kind"] is not None:
+            continue
+        if sub["status"] == 404:
+            continue
+        sub_html = sub["html"] or ""
+        # Skip if looks like a duplicate of homepage
+        if homepage_len > 0:
+            ratio = abs(len(sub_html) - homepage_len) / max(homepage_len, 1)
+            if ratio < 0.05:
+                continue
+        parsed_sub = urlparse(sub_url)
+        sub_path = parsed_sub.path.rstrip("/").lower() or "/"
+        result["pages"].append({
+            "url": sub_url,
+            "suffix": sub_path,
+            "status": sub["status"],
+            "html": sub_html,
+        })
+
+    return result
+
+
+# =============================================================================
+# PASS 1 -- HOMEPAGE FETCH (+ CONTACT / BOOKING SUBPAGES)
+# =============================================================================
+
+def _select_best_email(candidates, business_domain):
+    """
+    candidates: list of (strategy, email, source_page) tuples.
+    Returns (email, strategy, source_page) or (None, None, None).
+    Preference:
+      (a) mailto AND email-domain matches business-domain
+      (b) any strategy AND email-domain matches business-domain
+      (c) mailto on any domain
+      (d) any strategy on any non-DEAD-END domain
+    """
+    bd = (business_domain or "").lower().lstrip(".")
+
+    def domain_matches(email):
+        if not bd:
+            return False
+        _, _, edom = email.partition("@")
+        edom = edom.lower()
+        if not edom:
+            return False
+        return edom == bd or edom.endswith("." + bd)
+
+    # Bucket the candidates
+    a_bucket = []
+    b_bucket = []
+    c_bucket = []
+    d_bucket = []
+    for strategy, email, src in candidates:
+        dm = domain_matches(email)
+        if strategy == "mailto" and dm:
+            a_bucket.append((strategy, email, src))
+        elif dm:
+            b_bucket.append((strategy, email, src))
+        elif strategy == "mailto":
+            c_bucket.append((strategy, email, src))
+        else:
+            d_bucket.append((strategy, email, src))
+
+    for bucket in (a_bucket, b_bucket, c_bucket, d_bucket):
+        if bucket:
+            s, e, src = bucket[0]
+            return e, s, src
+    return None, None, None
+
+
 def fetch_homepage(url):
     """
-    Returns dict with: email, phone, owner_hint, internal_links, html, error_kind.
-    error_kind is None on success, else 'timeout'/'403'/'429'/'other'.
+    Fetches homepage + up to 4 contact/booking subpages. Runs 5-strategy email
+    extraction across all pages. Returns richer dict (v3 wire format):
+
+      {
+        "email": str | None,           # best email found across all pages
+        "email_source_page": str,      # which suffix won
+        "email_source_strategy": str,  # which strategy won
+        "email_candidates": list,      # all (strategy, email, source_page) tuples found
+        "phone": str | None,
+        "owner_hint": str | None,      # header/footer only, homepage
+        "internal_links": list,        # homepage-only, for Pass 2 about-page lookup
+        "html": str | None,            # HOMEPAGE html (backward compat)
+        "error_kind": str | None,
+        "pages_fetched": list,         # [{"suffix": "/", "status": 200}, ...]
+      }
     """
     result = {
         "email": None,
+        "email_source_page": None,
+        "email_source_strategy": None,
+        "email_candidates": [],
         "phone": None,
         "owner_hint": None,
         "internal_links": [],
         "html": None,
         "error_kind": None,
+        "pages_fetched": [],
     }
     if not url:
         result["error_kind"] = "other"
         return result
-    try:
-        resp = requests.get(url, headers=REQ_HEADERS, timeout=REQ_TIMEOUT, allow_redirects=True)
-        if resp.status_code >= 400:
-            result["error_kind"] = _classify_http_error(resp.status_code)
-            return result
-    except requests.Timeout:
-        result["error_kind"] = "timeout"
+
+    site = _fetch_site_pages(url)
+    if site["error_kind"] is not None:
+        result["error_kind"] = site["error_kind"]
+        # pages may still be empty
+        result["pages_fetched"] = [
+            {"suffix": p["suffix"], "status": p["status"]} for p in site["pages"]
+        ]
         return result
-    except Exception:
+
+    pages = site["pages"]
+    if not pages:
         result["error_kind"] = "other"
         return result
 
-    html = resp.text or ""
-    result["html"] = html
-    soup = BeautifulSoup(html, "lxml")
+    # Homepage HTML for backward compat
+    homepage = pages[0]
+    result["html"] = homepage["html"]
+    result["pages_fetched"] = [
+        {"suffix": p["suffix"], "status": p["status"]} for p in pages
+    ]
 
-    # Email: mailto first, then regex scan
-    for a in soup.find_all("a", href=True):
-        href = a["href"].strip()
-        if href.lower().startswith("mailto:"):
-            candidate = href[7:].split("?")[0].strip()
-            if candidate and not _is_dead_end_email(candidate):
-                result["email"] = candidate
+    # Business domain for email preference
+    business_domain = urlparse(url).netloc.lower()
+    if business_domain.startswith("www."):
+        business_domain = business_domain[4:]
+
+    # Collect candidates across all pages
+    all_candidates = []
+    for page in pages:
+        for strategy, email in _extract_emails_from_html(page["html"], business_domain):
+            all_candidates.append((strategy, email, page["suffix"]))
+
+    result["email_candidates"] = all_candidates
+
+    best_email, best_strategy, best_src = _select_best_email(all_candidates, business_domain)
+    result["email"] = best_email
+    result["email_source_strategy"] = best_strategy
+    result["email_source_page"] = best_src
+
+    # Homepage-only: phone, owner hint, internal links
+    try:
+        soup = BeautifulSoup(homepage["html"], "lxml")
+    except Exception:
+        soup = None
+
+    if soup is not None:
+        # Phone: tel: links
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if href.lower().startswith("tel:"):
+                phone = re.sub(r"[^\d+]", "", href[4:])
+                if len(phone) >= 10:
+                    result["phone"] = phone
+                    break
+
+        # Owner hint from header/footer only
+        for tag in soup.find_all(["header", "footer"]):
+            zone = tag.get_text(" ", strip=True)
+            m = _HOMEPAGE_OWNER_RE.search(zone)
+            if m:
+                result["owner_hint"] = m.group(1).strip()
                 break
-    if not result["email"]:
-        text = soup.get_text(" ", strip=True)
-        for m in re.finditer(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", text):
-            cand = m.group(0)
-            if not _is_dead_end_email(cand):
-                result["email"] = cand
-                break
 
-    # Phone: tel: links
-    for a in soup.find_all("a", href=True):
-        href = a["href"].strip()
-        if href.lower().startswith("tel:"):
-            phone = re.sub(r"[^\d+]", "", href[4:])
-            if len(phone) >= 10:
-                result["phone"] = phone
-                break
-
-    # Owner hint from header/footer only
-    for tag in soup.find_all(["header", "footer"]):
-        zone = tag.get_text(" ", strip=True)
-        m = _HOMEPAGE_OWNER_RE.search(zone)
-        if m:
-            result["owner_hint"] = m.group(1).strip()
-            break
-
-    # Internal links for Pass 2
-    base_netloc = urlparse(url).netloc.lower()
-    seen = set()
-    for a in soup.find_all("a", href=True):
-        href = a["href"].strip()
-        if not href or href.startswith("#") or href.lower().startswith(("mailto:", "tel:")):
-            continue
-        full = urljoin(url, href)
-        parsed = urlparse(full)
-        if not parsed.scheme.startswith("http"):
-            continue
-        if parsed.netloc and parsed.netloc.lower() != base_netloc:
-            continue
-        if full in seen:
-            continue
-        seen.add(full)
-        result["internal_links"].append(full)
+        # Internal links for Pass 2
+        base_netloc = urlparse(url).netloc.lower()
+        seen = set()
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href or href.startswith("#") or href.lower().startswith(("mailto:", "tel:")):
+                continue
+            full = urljoin(url, href)
+            parsed = urlparse(full)
+            if not parsed.scheme.startswith("http"):
+                continue
+            if parsed.netloc and parsed.netloc.lower() != base_netloc:
+                continue
+            if full in seen:
+                continue
+            seen.add(full)
+            result["internal_links"].append(full)
 
     return result
 
@@ -316,7 +787,7 @@ def fetch_about_page(url):
     """Returns dict: text, error_kind."""
     result = {"text": None, "error_kind": None}
     try:
-        resp = requests.get(url, headers=REQ_HEADERS, timeout=REQ_TIMEOUT, allow_redirects=True)
+        resp = requests.get(url, headers=_build_req_headers(), timeout=REQ_TIMEOUT, allow_redirects=True)
         if resp.status_code >= 400:
             result["error_kind"] = _classify_http_error(resp.status_code)
             return result
@@ -445,27 +916,29 @@ def extract_credentials(text, vertical):
 
 def places_lookup(business_name):
     """
-    Returns dict: rating, review_count, hours, is_operational, phone, review_texts.
-    All None if Places has no match. Raises RuntimeError only if API key missing.
-    review_texts is a list of review text strings (up to 5).
+    Returns dict: rating, review_count, hours, is_operational, phone,
+    review_texts, website_uri, formatted_address.
+    All None (or empty list) if Places has no match. Raises RuntimeError only if
+    API key missing. review_texts is a list of review text strings (up to 5).
     """
     result = {
         "rating": None, "review_count": None, "hours": None,
         "is_operational": None, "phone": None, "review_texts": [],
+        "website_uri": None, "formatted_address": None,
     }
     if not GOOGLE_PLACES_API_KEY:
         raise RuntimeError("GOOGLE_PLACES_API_KEY is required")
     if not business_name:
         return result
 
-    # Text Search -> place_id
+    # Text Search -> place_id (+ formattedAddress for sanity check / website hint)
     try:
         resp = requests.post(
             "https://places.googleapis.com/v1/places:searchText",
             headers={
                 "Content-Type": "application/json",
                 "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
-                "X-Goog-FieldMask": "places.id",
+                "X-Goog-FieldMask": "places.id,places.formattedAddress,places.websiteUri",
             },
             json={"textQuery": f"{business_name} Ontario Canada"},
             timeout=15,
@@ -484,6 +957,14 @@ def places_lookup(business_name):
     if not place_id:
         return result
 
+    # Capture early: formattedAddress + websiteUri from text search
+    ts_formatted_address = places[0].get("formattedAddress")
+    ts_website_uri = places[0].get("websiteUri")
+    if ts_formatted_address:
+        result["formatted_address"] = ts_formatted_address
+    if ts_website_uri:
+        result["website_uri"] = ts_website_uri
+
     # Place Details
     try:
         resp = requests.get(
@@ -492,7 +973,8 @@ def places_lookup(business_name):
                 "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
                 "X-Goog-FieldMask": (
                     "rating,userRatingCount,regularOpeningHours,"
-                    "businessStatus,nationalPhoneNumber,reviews.text"
+                    "businessStatus,nationalPhoneNumber,reviews.text,"
+                    "websiteUri,formattedAddress"
                 ),
             },
             timeout=15,
@@ -524,6 +1006,12 @@ def places_lookup(business_name):
         if len(phone) >= 10:
             result["phone"] = phone
 
+    # Prefer details-level websiteUri / formattedAddress when present
+    if details.get("websiteUri"):
+        result["website_uri"] = details["websiteUri"]
+    if details.get("formattedAddress"):
+        result["formatted_address"] = details["formattedAddress"]
+
     # Extract review texts (up to 5)
     for rev in details.get("reviews", []):
         text_obj = rev.get("text", {})
@@ -532,6 +1020,77 @@ def places_lookup(business_name):
             result["review_texts"].append(text)
 
     return result
+
+
+def _sanity_check_places_result(prospect, formatted_address, places_phone):
+    """
+    Return (passed: bool, reason: str). Checks whether Places result matches
+    prospect's city (from prospect.address) OR area code (from prospect.phone).
+    """
+    addr = prospect.get("address") or ""
+    tokens = [t.strip() for t in addr.split(",") if t.strip()]
+
+    def _is_postal(tok):
+        # Canadian postal: "L6T 3X1" / "L6T3X1" etc
+        return bool(re.fullmatch(r"[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d", tok.strip()))
+
+    def _is_province(tok):
+        return tok.strip().lower() in ("on", "ontario")
+
+    prospect_city = None
+    # Work backwards: last token is likely postal or province, skip those
+    filtered = [t for t in tokens if not _is_postal(t) and not _is_province(t)]
+    if filtered:
+        # Pick the last remaining non-empty token, which is usually the city
+        prospect_city = filtered[-1].lower()
+
+    fa_lower = (formatted_address or "").lower()
+    city_match = bool(prospect_city and fa_lower and prospect_city in fa_lower)
+
+    def _area_code(phone):
+        digits = re.sub(r"\D", "", phone or "")
+        if len(digits) < 10:
+            return None
+        tail10 = digits[-10:]
+        return tail10[:3]
+
+    prospect_ac = _area_code(prospect.get("phone") or "")
+    places_ac = _area_code(places_phone or "")
+    ac_match = bool(prospect_ac and places_ac and prospect_ac == places_ac)
+
+    if city_match or ac_match:
+        return True, "ok"
+    reason = (
+        f"city '{prospect_city}' not in '{formatted_address}'; "
+        f"area code {prospect_ac} != {places_ac}"
+    )
+    return False, reason
+
+
+# =============================================================================
+# CANARIES -- pre-flight sanity checks for Places + fetch pipeline
+# =============================================================================
+
+def run_canaries():
+    """
+    Returns list of (name, reason) for failed canaries. Empty = all pass.
+    """
+    failures = []
+    for name, expected_domain, expected_email in CANARIES:
+        try:
+            p3 = places_lookup(name)
+            uri = (p3.get("website_uri") or "").lower()
+            if expected_domain.lower() not in uri:
+                failures.append((name, f"websiteUri mismatch: {p3.get('website_uri')}"))
+                continue
+            p1 = fetch_homepage(p3["website_uri"])
+            cands = {e.lower() for _, e, _ in p1.get("email_candidates", [])}
+            if expected_email.lower() not in cands:
+                near = [e for e in cands if expected_email.split("@")[1].lower() in e]
+                failures.append((name, f"exact email not found. got: {sorted(near)[:3] or sorted(cands)[:3]}"))
+        except Exception as e:
+            failures.append((name, f"exception: {type(e).__name__}: {str(e)[:60]}"))
+    return failures
 
 
 # =============================================================================
@@ -775,29 +1334,87 @@ class CircuitBreaker:
 
 def enrich_one(prospect, circuit_breaker):
     name = prospect.get("name") or ""
-    website = prospect.get("website") or ""
+    website = (prospect.get("website") or "").strip()
     vertical = prospect.get("cat") or ""
     existing_owner = prospect.get("owner")
     existing_owner_name = prospect.get("owner_name")
     existing_email = prospect.get("email")
     existing_phone = prospect.get("phone")
 
-    patch = {"enriched_at": datetime.now(timezone.utc).isoformat()}
+    already_had_email = bool((existing_email or "").strip())
 
-    # Pass 1
+    patch = {"enriched_at": datetime.now(timezone.utc).isoformat()}
+    log = {
+        "prospect_id": prospect["id"],
+        "name": name[:40],
+        "pages_fetched": [],
+        "strategies_tried": [],
+        "strategies_hit": [],
+        "final_email": None,
+        "email_source_page": None,
+        "email_source_strategy": None,
+        "website_was_null": not bool(website),
+        "website_from_places": None,
+        "sanity_check": "n/a",
+        "reason_if_skipped": None,
+        "had_email_before": already_had_email,
+    }
+
+    # Pass 3 (Places) -- run FIRST so we can use websiteUri as fallback
+    p3 = places_lookup(name)
+    pass3_ok = any(
+        v is not None and v != []
+        for k, v in p3.items()
+        if k not in ("review_texts", "formatted_address")
+    )
+    if p3["rating"] is not None:
+        patch["rating"] = p3["rating"]
+    if p3["review_count"] is not None:
+        patch["review_count"] = p3["review_count"]
+    if p3["hours"] is not None:
+        patch["hours"] = p3["hours"]
+    if p3["is_operational"] is not None:
+        patch["is_operational"] = p3["is_operational"]
+    if p3["phone"] and not existing_phone:
+        patch["phone"] = p3["phone"]
+
+    # Website fallback from Places (sanity-checked)
+    if not website and p3.get("website_uri"):
+        passed, reason = _sanity_check_places_result(
+            prospect, p3.get("formatted_address"), p3.get("phone")
+        )
+        log["sanity_check"] = "passed" if passed else f"failed ({reason})"
+        if passed:
+            website = p3["website_uri"].strip()
+            patch["website"] = website
+            log["website_from_places"] = website
+        else:
+            log["reason_if_skipped"] = f"places website rejected: {reason}"
+
+    # Pass 1 + subpages (multi-page, multi-strategy email extraction)
+    pass1_ok = False
+    p1 = {
+        "email": None, "phone": None, "owner_hint": None,
+        "internal_links": [], "html": None, "error_kind": "other",
+        "pages_fetched": [], "email_candidates": [],
+        "email_source_page": None, "email_source_strategy": None,
+    }
     if website:
         p1 = fetch_homepage(website)
-    else:
-        p1 = {
-            "email": None, "phone": None, "owner_hint": None,
-            "internal_links": [], "html": None, "error_kind": "other",
-        }
-    pass1_ok = p1["error_kind"] is None
-    if pass1_ok:
-        if p1["email"] and not existing_email:
-            patch["email"] = p1["email"]
-        if p1["phone"] and not existing_phone:
-            patch["phone"] = p1["phone"]
+        log["pages_fetched"] = p1.get("pages_fetched", [])
+        log["strategies_tried"] = sorted({s for s, _, _ in p1.get("email_candidates", [])})
+        pass1_ok = p1["error_kind"] is None
+
+        if pass1_ok:
+            if p1.get("email") and not existing_email:
+                patch["email"] = p1["email"]
+                log["final_email"] = p1["email"]
+                log["email_source_page"] = p1.get("email_source_page")
+                log["email_source_strategy"] = p1.get("email_source_strategy")
+                if p1.get("email_source_strategy"):
+                    log["strategies_hit"] = [p1["email_source_strategy"]]
+            if p1.get("phone") and not existing_phone and "phone" not in patch:
+                patch["phone"] = p1["phone"]
 
     # Pass 2
     pass2_ok = False
@@ -822,26 +1439,12 @@ def enrich_one(prospect, circuit_breaker):
                     patch["credentials"] = creds
 
     # Owner dual-write (Pass 2 first, then Pass 1 hint). Only fill null fields.
-    owner_candidate = pass2_owner or p1["owner_hint"]
+    owner_candidate = pass2_owner or p1.get("owner_hint")
     if owner_candidate:
         if not existing_owner:
             patch["owner"] = owner_candidate
         if not existing_owner_name:
             patch["owner_name"] = owner_candidate
-
-    # Pass 3
-    p3 = places_lookup(name)
-    pass3_ok = any(v is not None for k, v in p3.items() if k != "review_texts")
-    if p3["rating"] is not None:
-        patch["rating"] = p3["rating"]
-    if p3["review_count"] is not None:
-        patch["review_count"] = p3["review_count"]
-    if p3["hours"] is not None:
-        patch["hours"] = p3["hours"]
-    if p3["is_operational"] is not None:
-        patch["is_operational"] = p3["is_operational"]
-    if p3["phone"] and "phone" not in patch and not existing_phone:
-        patch["phone"] = p3["phone"]
 
     # Manual-work scoring (uses Pass 1 HTML + Pass 3 review texts)
     if pass1_ok or p3["review_texts"]:
@@ -871,26 +1474,93 @@ def enrich_one(prospect, circuit_breaker):
         "found_owner": bool(owner_candidate),
         "found_reviews": patch.get("rating") is not None or patch.get("review_count") is not None,
         "found_about": "about_us_content" in patch,
+        "log": log,
     }
 
 
-def run(max_prospects=100, dry_run=False, prospect_id=None):
+def run(max_prospects=100, dry_run=False, prospect_id=None, backfill=False):
     if not GOOGLE_PLACES_API_KEY:
         raise RuntimeError("GOOGLE_PLACES_API_KEY is required -- aborting")
     if not ANTHROPIC_API_KEY:
         print("WARNING: ANTHROPIC_API_KEY is not set; LLM owner fallback disabled")
 
-    print(f"[{datetime.now().isoformat()}] Unify Enrichment v2 starting "
-          f"(max={max_prospects}, dry_run={dry_run})")
-    prospects = get_prospects_to_enrich(max_prospects=max_prospects, prospect_id=prospect_id)
+    run_start = time.time()
+    # Determine trigger
+    trigger = "backfill" if backfill else ("manual" if prospect_id is None and max_prospects and max_prospects != 100 else "cron")
+    if prospect_id:
+        trigger = "manual"
+
+    print(f"[{datetime.now().isoformat()}] Unify Enrichment v3 starting "
+          f"(max={max_prospects}, dry_run={dry_run}, backfill={backfill}, trigger={trigger})")
+
+    # Canaries (before any prospect work)
+    print(f"[{datetime.now().isoformat()}] Running canaries...")
+    canary_failures = run_canaries()
+    canary_pass = True
+    if len(canary_failures) == 0:
+        print("Canaries: all 5 passed")
+    elif len(canary_failures) == 1:
+        n, r = canary_failures[0]
+        print(f"Canary WARNING (1 of 5 failed): {n} -- {r}")
+        send_sms(f"\u26a0\ufe0f CANARY FLAKY: {n} -- {r[:200]}")
+        canary_pass = True  # still continue
+    else:
+        msg = (
+            f"\u26a0\ufe0f CANARY ABORT: {len(canary_failures)}/5 failed. "
+            "Run aborted, 0 prospects touched. "
+            + "; ".join(f"{n}: {r[:80]}" for n, r in canary_failures[:3])
+        )
+        print(msg)
+        send_sms(msg[:1500])
+        _insert_enrichment_run({
+            "trigger": trigger,
+            "duration_seconds": int(time.time() - run_start),
+            "total_scanned": 0,
+            "emails_found": 0,
+            "emails_already_present": 0,
+            "websites_discovered": 0,
+            "websites_rejected_sanity": 0,
+            "per_strategy": {},
+            "per_vertical": {},
+            "canary_pass": False,
+            "canary_failures": [{"name": n, "reason": r} for n, r in canary_failures],
+        })
+        return
+
+    prospects = get_prospects_to_enrich(
+        max_prospects=max_prospects, prospect_id=prospect_id, backfill=backfill,
+    )
     print(f"Fetched {len(prospects)} prospect(s) to enrich")
     if not prospects:
-        send_sms("Unify Enrichment: 0 processed, 0 owners, 0 reviews, 0 failed.")
+        send_sms("Unify enrichment: 0 processed, 0 owners, 0 reviews, 0 failed.")
+        _insert_enrichment_run({
+            "trigger": trigger,
+            "duration_seconds": int(time.time() - run_start),
+            "total_scanned": 0,
+            "emails_found": 0,
+            "emails_already_present": 0,
+            "websites_discovered": 0,
+            "websites_rejected_sanity": 0,
+            "per_strategy": {},
+            "per_vertical": {},
+            "canary_pass": canary_pass,
+            "canary_failures": [{"name": n, "reason": r} for n, r in canary_failures] if canary_failures else None,
+        })
         return
 
     cb = CircuitBreaker(threshold=3)
     results = []
     errors = 0
+
+    metrics = {
+        "total_scanned": len(prospects),
+        "emails_found": 0,
+        "emails_already_present": 0,
+        "websites_discovered": 0,
+        "websites_rejected_sanity": 0,
+        "per_strategy": defaultdict(int),
+        "per_vertical": defaultdict(lambda: {"scanned": 0, "email_found": 0}),
+    }
 
     def worker(p):
         try:
@@ -899,6 +1569,9 @@ def run(max_prospects=100, dry_run=False, prospect_id=None):
             return out
         except Exception as e:
             return {"prospect_id": p.get("id"), "error": str(e)}
+
+    # Build lookup for per-prospect vertical
+    prospect_by_id = {p["id"]: p for p in prospects}
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = [pool.submit(worker, p) for p in prospects]
@@ -915,6 +1588,30 @@ def run(max_prospects=100, dry_run=False, prospect_id=None):
                 f"p3={int(r['pass3_ok'])} owner={int(r['found_owner'])} "
                 f"rev={int(r['found_reviews'])} about={int(r['found_about'])}"
             )
+
+            # Structured log line (JSON)
+            log = r.get("log", {})
+            try:
+                print(json.dumps(log))
+            except Exception:
+                pass
+
+            # Metrics
+            p_src = prospect_by_id.get(r["prospect_id"]) or {}
+            vertical = p_src.get("cat") or "UNKNOWN"
+            metrics["per_vertical"][vertical]["scanned"] += 1
+            if r["patch"].get("email") and not log.get("had_email_before"):
+                metrics["emails_found"] += 1
+                metrics["per_vertical"][vertical]["email_found"] += 1
+                if log.get("email_source_strategy"):
+                    metrics["per_strategy"][log["email_source_strategy"]] += 1
+            if log.get("had_email_before"):
+                metrics["emails_already_present"] += 1
+            if log.get("website_from_places"):
+                metrics["websites_discovered"] += 1
+            if isinstance(log.get("sanity_check"), str) and log["sanity_check"].startswith("failed"):
+                metrics["websites_rejected_sanity"] += 1
+
             if not dry_run:
                 try:
                     update_prospect_enrichment(pid, r["patch"])
@@ -926,26 +1623,63 @@ def run(max_prospects=100, dry_run=False, prospect_id=None):
     n_owner = sum(1 for r in results if r["found_owner"])
     n_reviews = sum(1 for r in results if r["found_reviews"])
     n_failed = errors + sum(1 for r in results if r["patch"].get("enrichment_status") == "failed")
+
+    duration = int(time.time() - run_start)
+    hit_rate = 100.0 * metrics["emails_found"] / metrics["total_scanned"] if metrics["total_scanned"] else 0.0
+
+    # Log run row
+    _insert_enrichment_run({
+        "trigger": trigger,
+        "duration_seconds": duration,
+        "total_scanned": metrics["total_scanned"],
+        "emails_found": metrics["emails_found"],
+        "emails_already_present": metrics["emails_already_present"],
+        "websites_discovered": metrics["websites_discovered"],
+        "websites_rejected_sanity": metrics["websites_rejected_sanity"],
+        "per_strategy": dict(metrics["per_strategy"]),
+        "per_vertical": {k: dict(v) for k, v in metrics["per_vertical"].items()},
+        "canary_pass": canary_pass,
+        "canary_failures": [{"name": n_, "reason": r_} for n_, r_ in canary_failures] if canary_failures else None,
+    })
+
+    # SMS summary
+    prefix = (
+        "\u26a0\ufe0f ENRICHMENT HEALTH: "
+        if hit_rate < 25.0 and metrics["total_scanned"] >= 20
+        else "Unify enrichment: "
+    )
     body = (
-        f"Unify Enrichment: {n} processed, {n_owner} owners, "
-        f"{n_reviews} reviews, {n_failed} failed."
+        f"{prefix}{metrics['emails_found']}/{metrics['total_scanned']} new emails "
+        f"({hit_rate:.1f}% hit). {metrics['websites_discovered']} sites via Places. "
+        f"Canaries: {5 - len(canary_failures)}/5 passed. {duration}s."
     )
     if cb.tripped_reason:
         body += f" Pass 2 circuit-broken: {cb.tripped_reason}."
     print(body)
+    print(
+        f"Breakdown: {n} processed, {n_owner} owners, "
+        f"{n_reviews} reviews, {n_failed} failed."
+    )
     send_sms(body)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Unify Enrichment Agent v2")
+    parser = argparse.ArgumentParser(description="Unify Enrichment Agent v3")
     parser.add_argument("--max", "-m", type=int, default=100,
                         help="Max prospects to process (default 100)")
     parser.add_argument("--dry-run", "-d", action="store_true",
                         help="Skip writing to Supabase; print results only")
     parser.add_argument("--prospect-id", help="Enrich only this specific prospect id")
+    parser.add_argument("--backfill", action="store_true",
+                        help="Backfill mode: pick prospects where email='' regardless of enriched_at")
     args = parser.parse_args()
     try:
-        run(max_prospects=args.max, dry_run=args.dry_run, prospect_id=args.prospect_id)
+        run(
+            max_prospects=args.max,
+            dry_run=args.dry_run,
+            prospect_id=args.prospect_id,
+            backfill=args.backfill,
+        )
     except RuntimeError as e:
         print(f"FATAL: {e}")
         send_sms(f"Unify Enrichment FATAL: {e}")
