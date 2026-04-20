@@ -1,4 +1,4 @@
-name: Unify Cold Email Drafts (v6)
+name: Unify Cold Email Drafts (v6.5)
 
 on:
   schedule:
@@ -16,7 +16,6 @@ on:
           - draft
           - redraft
           - follow-ups
-          - loom-recorded
           - send
       max:
         description: 'Max prospects to process'
@@ -42,7 +41,6 @@ jobs:
           mode="${{ github.event.inputs.mode || 'draft' }}"
           case "$mode" in
             follow-ups)     echo "flag=--follow-ups"    >> "$GITHUB_OUTPUT" ;;
-            loom-recorded)  echo "flag=--loom-recorded" >> "$GITHUB_OUTPUT" ;;
             *)              echo "flag=--$mode"         >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -59,9 +57,8 @@ jobs:
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
         run: python cold_email_agent.py ${{ steps.mode.outputs.flag }} --max ${{ github.event.inputs.max || '50' }}
 
-      # When running on the cron schedule (mode defaults to 'draft'), sweep
-      # follow-ups and any loom_recorded entries right after the Day-0 drafts.
-      # Manual dispatch runs don't trigger these extras -- only the selected mode.
+      # On the cron schedule, sweep Day 4/11/14 follow-ups after the Day-0 drafts.
+      # Manual dispatch runs only execute the selected mode.
       - name: Follow-ups sweep (scheduled runs only)
         if: github.event_name == 'schedule'
         env:
@@ -74,16 +71,3 @@ jobs:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
         run: python cold_email_agent.py --follow-ups --max 20
-
-      - name: Loom-recorded follow-up sweep (scheduled runs only)
-        if: github.event_name == 'schedule'
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TWILIO_SID: ${{ secrets.TWILIO_SID }}
-          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
-          TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
-          FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
-        run: python cold_email_agent.py --loom-recorded

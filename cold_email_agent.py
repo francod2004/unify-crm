@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Unify Cold Email Agent v6 (Loom Pivot)
-=======================================
-Four-sentence cold emails that promise a 3-minute Loom. Reads enriched
+Unify Cold Email Agent v6.5 (consultation CTA)
+===============================================
+Four-paragraph cold emails that pitch a 20-minute intro call. Reads enriched
 prospects from Supabase and drafts personalized touches routed through
 the agent_queue for Franco's approval.
 
-Key v6 changes vs v5.2:
-  - Email body collapsed to 4 sentences: greeting / hook / observation / Loom offer
-  - Vertical body templates removed -- entire "sell the consultation" section cut
+Key v6.5 changes vs v6:
+  - Paragraph 3 is now a three-sentence consultation pitch (Franco drives the
+    intro call directly rather than routing through a video intermediary)
+  - Email body structure: greeting / hook / observation / consultation_pitch / sign-off
   - Subject kept: "Quick question about {business_name}"
   - Hooks read rating / review_count / years_in_business directly from Supabase
     columns (closes v6 wiring gap -- v5.2 parsed them out of the free-text notes)
   - Priority-ordered processing: high drafts first, medium second, low skipped
   - manual_work_signal drives sentence 3 (fallback per vertical if missing)
-  - agent_queue status enum extended with loom_requested + loom_recorded
-  - New follow-up sequence: Day 0 / Day 4 / Day 11 / Day 14 -- all via approval
+  - Follow-up sequence: Day 0 / Day 4 / Day 11 / Day 14 -- all via approval
   - Seven paused verticals raise PausedVerticalError if ever queried (sourcer
     filters to dental + trades, so reaching a paused vertical is a real bug)
   - pending -> sent transition is handled by a DB trigger that bumps
@@ -24,8 +24,6 @@ Key v6 changes vs v5.2:
 Modes:
   --draft        : Draft Day-0 cold emails, priority-ordered
   --follow-ups   : Draft Day 4 / Day 11 / Day 14 touches for sent prospects
-  --loom-script  : Poll loom_requested entries, draft 3-bullet Loom scripts
-  --loom-recorded: Draft follow-up emails with Loom link for loom_recorded entries
   --send         : Send approved emails via Resend (unchanged from v5.2)
   --mark-sent    : Flip a queue entry to 'sent' manually (triggers touch update)
   --redraft      : Clear cold_email queue + reset PHONE CALL READY -> NOT CONTACTED
@@ -290,40 +288,6 @@ def get_prospects_by_priority(priority: str, redraft: bool = False):
     return [p for p in rows if not _is_dead_end_email(p.get("email") or "")]
 
 
-def get_prospects_for_loom_recorded():
-    """Fetch prospects whose most recent agent_queue entry is loom_recorded
-    AND whose loom_link is set (Franco has pasted it)."""
-    url = (
-        f"{SUPABASE_URL}/rest/v1/agent_queue"
-        f"?select=*,prospects(*)"
-        f"&action_type=eq.cold_email"
-        f"&status=eq.loom_recorded"
-    )
-    r = requests.get(url, headers=sb_headers(), timeout=15)
-    if r.status_code != 200:
-        print(f"  Warning: loom_recorded fetch failed ({r.status_code})")
-        return []
-    rows = r.json()
-    return [row for row in rows if (row.get("prospects") or {}).get("loom_link")]
-
-
-def get_loom_requested_entries():
-    """Fetch agent_queue entries with status=loom_requested that don't yet
-    have a loom_script in their payload."""
-    url = (
-        f"{SUPABASE_URL}/rest/v1/agent_queue"
-        f"?select=*,prospects(*)"
-        f"&action_type=eq.cold_email"
-        f"&status=eq.loom_requested"
-    )
-    r = requests.get(url, headers=sb_headers(), timeout=15)
-    if r.status_code != 200:
-        print(f"  Warning: loom_requested fetch failed ({r.status_code})")
-        return []
-    rows = r.json()
-    return [row for row in rows if not (row.get("payload") or {}).get("loom_script")]
-
-
 def get_existing_queue_ids(action_types=("cold_email",)):
     """Fetch prospect IDs that already have an entry in agent_queue."""
     types_filter = ",".join(action_types)
@@ -357,7 +321,7 @@ def get_sent_prospects_awaiting_followup():
 
 
 def insert_draft_to_queue(prospect_id, payload, action_type="cold_email"):
-    """Insert a draft (email or loom script or follow-up) into agent_queue."""
+    """Insert a draft (email or follow-up) into agent_queue."""
     url = f"{SUPABASE_URL}/rest/v1/agent_queue"
     row = {
         "prospect_id": prospect_id,
@@ -372,14 +336,6 @@ def insert_draft_to_queue(prospect_id, payload, action_type="cold_email"):
         return result[0]["id"] if result else True
     print(f"    Queue insert failed ({r.status_code}): {r.text[:200]}")
     return False
-
-
-def update_queue_payload(queue_id, payload):
-    """Merge new payload data into an existing agent_queue entry."""
-    url = f"{SUPABASE_URL}/rest/v1/agent_queue?id=eq.{queue_id}"
-    r = requests.patch(url, headers=sb_headers(),
-                       json={"payload": payload}, timeout=15)
-    return r.status_code in (200, 204)
 
 
 def update_queue_status(queue_id, status):
@@ -517,7 +473,7 @@ def _to_em_dash(s: str) -> str:
 # =============================================================================
 # EMAIL SIGNATURE BLOCK (restored 2026-04-20)
 # -----------------------------------------------------------------------------
-# Previously added in commit 8403de8 (2026-04-14), removed during the v6 Loom
+# Previously added in commit 8403de8 (2026-04-14), removed during the v6
 # pivot (d731cfc) which switched to a bare "-- Franco" sign-off. Restored here
 # at Franco's request; the bare sign-off reads as draft notation in real
 # inbox delivery and hurts the prospect's first impression of the brand.
@@ -678,14 +634,14 @@ def _build_observation(prospect: dict) -> str:
 
 
 def _build_email_body(prospect: dict, tier: int, hook: str):
-    """Build the 4-sentence email body. Returns (subject, text, html).
+    """Build the 4-paragraph email body. Returns (subject, text, html).
 
-    Structure (4 sentences + greeting + sign-off):
+    Structure (greeting + 3 body paragraphs + sign-off):
       1. Greeting
       2. Hook
       3. Observation (manual_work_signal)
-      4. Loom offer
-      sign-off: -- Franco
+      4. Consultation pitch (three-sentence intro-call offer)
+      sign-off: signature block
     """
     business_name = _clean_business_name(prospect.get("name", "your business"))
     owner = (prospect.get("owner_name") or prospect.get("owner") or "").strip()
@@ -720,9 +676,17 @@ def _build_email_body(prospect: dict, tier: int, hook: str):
 
     observation = _build_observation(prospect)
 
-    loom_offer = (
-        f"I put together a 3-minute Loom showing three specific automations "
-        f"I'd build for {business_name} -- want me to send it?"
+    # Consultation pitch -- locked copy, business-name free (Franco: "sounds
+    # fake"). Em-dashes rendered via _to_em_dash at the final step.
+    consultation_pitch = (
+        "The street-level signals are usually the smallest piece -- the rest "
+        "is in how day-to-day actually runs, and Unify builds custom systems "
+        "that slot into how owner-operated businesses already work, rather "
+        "than asking anyone to change the way they do things. Happy to come "
+        "out and walk through these processes with you in person, and if "
+        "there's opportunity for improvement we'll let you know -- from there "
+        "we can work out future steps. Worth a 20-minute intro call this "
+        "week or next to see if it lines up?"
     )
 
     # Plain text version -- em-dash conversion applied to the body only;
@@ -733,7 +697,7 @@ def _build_email_body(prospect: dict, tier: int, hook: str):
             f"{greeting}\n\n"
             f"{hook}\n\n"
             f"{observation}\n\n"
-            f"{loom_offer}\n\n"
+            f"{consultation_pitch}\n\n"
         )
         + _signature_text()
     )
@@ -744,7 +708,7 @@ def _build_email_body(prospect: dict, tier: int, hook: str):
             f"<p>{greeting}</p>\n"
             f"<p>{hook}</p>\n"
             f"<p>{observation}</p>\n"
-            f"<p>{loom_offer}</p>\n"
+            f"<p>{consultation_pitch}</p>\n"
         )
         + _signature_html()
     )
@@ -754,7 +718,7 @@ def _build_email_body(prospect: dict, tier: int, hook: str):
 
 
 def generate_email(prospect: dict):
-    """Build the v6 4-sentence cold email for a prospect. Returns a dict
+    """Build the v6.5 cold email for a prospect. Returns a dict
     or None if email is missing / dead-end / vertical is paused."""
     email = (prospect.get("email") or "").strip()
     if not email or "@" not in email:
@@ -812,7 +776,10 @@ def _build_day4_email(prospect: dict):
     first_name = _extract_first_name(owner)
     greeting = f"Hi {first_name}," if first_name else "Hi there,"
 
-    body = "Did my last note get buried? Happy to send that Loom over whenever works."
+    body = (
+        f"Did my last note get buried? Still happy to set aside 20 minutes "
+        f"to walk through what we'd do for {business_name} if it's useful."
+    )
 
     text = _to_em_dash(f"{greeting}\n\n{body}\n\n") + _signature_text()
     html = _to_em_dash(f"<p>{greeting}</p>\n<p>{body}</p>\n") + _signature_html()
@@ -860,7 +827,7 @@ def _build_day14_call_sms(prospect: dict):
 def run_follow_ups(max_per_day=20, dry_run=False):
     """Sweep sent prospects for Day 4 / 11 / 14 touches."""
     print("=" * 60)
-    print("  Unify Cold Email Agent v6 -- FOLLOW-UPS MODE")
+    print("  Unify Cold Email Agent v6.5 -- FOLLOW-UPS MODE")
     print("=" * 60)
 
     candidates = get_sent_prospects_awaiting_followup()
@@ -932,189 +899,6 @@ def run_follow_ups(max_per_day=20, dry_run=False):
 
 
 # =============================================================================
-# Loom Workflow (human-in-the-loop)
-# =============================================================================
-
-def _build_loom_script(prospect: dict) -> str:
-    """Three bullet points Franco can use as a recording guide. References
-    specific enrichment data (rating, review_count, manual_work_signal,
-    years_in_business) when available."""
-    business_name = _clean_business_name(prospect.get("name", "your business"))
-    vertical = prospect.get("cat", "")
-    signal = (prospect.get("manual_work_signal") or "").strip()
-    rating = prospect.get("rating")
-    review_count = prospect.get("review_count")
-    years = prospect.get("years_in_business")
-
-    # Bullet 1: point at the specific friction from manual_work_signal
-    if signal:
-        bullet1 = (
-            f'- Open {business_name} website, point at the friction: "Right now '
-            f'{signal} -- that\'s typically 5-10 minutes of staff time per request '
-            f'that an automation can absorb."'
-        )
-    else:
-        fallback = _OBSERVATION_FALLBACK.get(vertical, "a manual step in your intake")
-        bullet1 = (
-            f'- Open {business_name} website, point at {fallback}, say: '
-            f'"This is the kind of step that adds up across a week -- and it\'s '
-            f'exactly the kind of thing I\'d build an automation for."'
-        )
-
-    # Bullet 2: reference reviews or years in business for credibility
-    if rating is not None and review_count is not None and review_count >= 5:
-        bullet2 = (
-            f'- Point at Google reviews, say: "I see you have {int(review_count)} '
-            f'reviews at {float(rating):.1f} stars -- automating a post-visit '
-            f'follow-up that invites 5-star reviews would compound that."'
-        )
-    elif years is not None and int(years) >= 5:
-        bullet2 = (
-            f'- Reference longevity: "{int(years)}+ years in the business means '
-            f'you already have patterns worth preserving -- the automation '
-            f'should work around them, not force new ones."'
-        )
-    else:
-        bullet2 = (
-            f'- Reference their independent/owner-operated status: "What I build '
-            f'is designed to slot into how you already work -- no new software '
-            f'to learn, no hire-to-operate."'
-        )
-
-    # Bullet 3: pitch the three automations (vertical-specific)
-    if vertical == "Dental & Medical":
-        three = ("appointment confirmation and reminder sequence, "
-                 "no-show recovery, review request flow")
-    elif vertical == "Trades":
-        three = ("quote-request auto-response, "
-                 "job scheduling SMS sequence, "
-                 "review request after job completion")
-    else:
-        three = ("intake automation, follow-up sequence, review capture")
-
-    bullet3 = (
-        f'- Close on: "Three automations I\'d build for you: {three}. '
-        f'Happy to walk through any of them on a quick call."'
-    )
-
-    return "\n".join([bullet1, bullet2, bullet3])
-
-
-def run_loom_scripts(dry_run=False):
-    """Poll for loom_requested entries, draft 3-bullet Loom scripts,
-    SMS Franco when one is ready to record."""
-    print("=" * 60)
-    print("  Unify Cold Email Agent v6 -- LOOM SCRIPT MODE")
-    print("=" * 60)
-
-    entries = get_loom_requested_entries()
-    print(f"  {len(entries)} loom_requested entries without scripts")
-
-    drafted = 0
-    for entry in entries:
-        prospect = entry.get("prospects") or {}
-        if not prospect:
-            continue
-        queue_id = entry.get("id")
-        name = prospect.get("name", "unknown")
-        print(f"\n  Drafting Loom script for: {name}")
-
-        script = _build_loom_script(prospect)
-        print(f"  --- Script preview ---\n{script}\n  ---")
-
-        if dry_run:
-            drafted += 1
-            continue
-
-        # Merge script into existing payload
-        existing = entry.get("payload") or {}
-        existing["loom_script"] = script
-        existing["loom_script_drafted_at"] = datetime.now(timezone.utc).isoformat()
-
-        if update_queue_payload(queue_id, existing):
-            send_sms(f"Unify: Record Loom for {name}. Script in CRM.")
-            drafted += 1
-        else:
-            print(f"    WARNING: could not write script back to queue")
-
-    if drafted == 0:
-        print("  Nothing to draft.")
-    print("\n" + "=" * 60)
-    print(f"  Loom scripts drafted: {drafted}")
-    print("=" * 60)
-
-
-def _build_loom_recorded_followup(prospect: dict, loom_link: str):
-    """Follow-up email once Franco records the Loom and pastes the link."""
-    business_name = _clean_business_name(prospect.get("name", "your business"))
-    owner = (prospect.get("owner_name") or prospect.get("owner") or "").strip()
-    first_name = _extract_first_name(owner)
-    greeting = f"Hi {first_name}," if first_name else "Hi there,"
-
-    body = f"Here's that Loom -- 3 minutes: {loom_link}"
-    callout = ("If anything in it feels worth a deeper conversation, "
-               "happy to jump on a quick call.")
-
-    text = _to_em_dash(f"{greeting}\n\n{body}\n\n{callout}\n\n") + _signature_text()
-    html = _to_em_dash(
-        f"<p>{greeting}</p>\n"
-        f"<p>{body}</p>\n"
-        f"<p>{callout}</p>\n"
-    ) + _signature_html()
-
-    return {
-        "to_email": prospect.get("email"),
-        "to_name": first_name or prospect.get("name", ""),
-        "subject": f"Re: Quick question about {business_name}",
-        "body_text": text,
-        "body_html": html,
-        "loom_link": loom_link,
-        "touch": 2,  # This is their second warm touch
-        "drafted_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def run_loom_recorded_followups(dry_run=False):
-    """For each loom_recorded entry with a loom_link, draft a follow-up
-    email that delivers the Loom."""
-    print("=" * 60)
-    print("  Unify Cold Email Agent v6 -- LOOM RECORDED FOLLOW-UP MODE")
-    print("=" * 60)
-
-    entries = get_prospects_for_loom_recorded()
-    print(f"  {len(entries)} loom_recorded entries with loom_link set")
-
-    gmail = None if dry_run else get_gmail_service()
-    drafted = 0
-    for entry in entries:
-        prospect = entry.get("prospects") or {}
-        loom_link = prospect.get("loom_link")
-        pid = prospect.get("id")
-        if not loom_link or not pid:
-            continue
-
-        payload = _build_loom_recorded_followup(prospect, loom_link)
-        print(f"\n  Drafting Loom delivery: {prospect.get('name')} -> {payload['to_email']}")
-        if dry_run:
-            drafted += 1
-            continue
-
-        if gmail:
-            create_gmail_draft(gmail, payload["to_email"], payload["to_name"],
-                               payload["subject"], payload["body_html"],
-                               payload["body_text"])
-        # Insert as new queue entry so the approval flow is identical to Day-0
-        insert_draft_to_queue(pid, payload, action_type="loom_delivery")
-        # Flip the original loom_recorded entry so we don't re-draft
-        update_queue_status(entry.get("id"), "loom_delivered")
-        drafted += 1
-
-    print("\n" + "=" * 60)
-    print(f"  Loom delivery drafts: {drafted}")
-    print("=" * 60)
-
-
-# =============================================================================
 # Draft Mode (Day 0)
 # =============================================================================
 
@@ -1142,13 +926,15 @@ def _draft_one(prospect, gmail, dry_run):
     if not email_data:
         return False, None
 
-    # Acceptance sanity check: 4 sentences in body
-    # (greeting + hook + observation + loom_offer, sign-off is sentence-level
-    # too but conventionally excluded -- count the hook/observation/loom body)
+    # Acceptance sanity check on rendered line count.
+    # After PR #10 (signature block restored) each rendered email has:
+    #   4 body paragraphs (greeting / hook / observation / consultation_pitch)
+    # + 1 sig-dash line "--"
+    # + 5 signature lines (name, title, phone, email, website)
+    # = 10 non-empty lines. Anything else is a template drift worth logging.
     body_sentences = [ln for ln in email_data["body_text"].split("\n") if ln.strip()]
-    # greeting, hook, observation, loom_offer, signoff = 5 non-empty lines
-    if len(body_sentences) != 5:
-        print(f"    Warning: email has {len(body_sentences)} lines, expected 5")
+    if len(body_sentences) != 10:
+        print(f"    Warning: email has {len(body_sentences)} lines, expected 10")
 
     if dry_run:
         print(f"    [DRY RUN] Subject: {email_data['subject']}")
@@ -1185,7 +971,7 @@ def run_draft(max_drafts=50, dry_run=False, redraft=False):
     """Day-0 draft mode, priority-ordered: high first, medium second, low skipped."""
     mode_label = "REDRAFT MODE" if redraft else "DRAFT MODE"
     print("=" * 60)
-    print(f"  Unify Cold Email Agent v6 -- {mode_label}")
+    print(f"  Unify Cold Email Agent v6.5 -- {mode_label}")
     print("=" * 60)
     print(f"  Max drafts  : {max_drafts}")
     print(f"  Dry run     : {dry_run}")
@@ -1270,7 +1056,7 @@ def run_send(dry_run=False):
     """Send approved emails via Resend. Uses mark_sent() so the DB trigger
     bumps touch_count + last_touch_at atomically."""
     print("=" * 60)
-    print("  Unify Cold Email Agent v6 -- SEND MODE")
+    print("  Unify Cold Email Agent v6.5 -- SEND MODE")
     print("=" * 60)
 
     if not RESEND_API_KEY and not dry_run:
@@ -1413,6 +1199,28 @@ def _self_test():
     assert "I poked around" not in e["body_text"]
     assert "looks like it still" not in e["body_text"]
 
+    print("  [self-test] consultation pitch present")
+    for needle in [
+        "Unify builds custom systems",
+        "come out and walk through these processes",
+        "if there's opportunity for improvement",
+        "Worth a 20-minute intro call",
+    ]:
+        assert needle in e["body_text"], f"consultation pitch missing needle {needle!r}"
+
+    # Confirm Loom is gone from renders. Use word-boundary regex for "loom"
+    # so prospect names like "Bloom Co.", "Loomis Cleaning", or "Heirloom
+    # Dental" never false-positive (bare substring "loom" would trip on all
+    # three and mask a real regression). Other phrases stay as plain
+    # substring matches — they're long enough that name collisions are
+    # implausible.
+    loom_word = re.compile(r"\bloom\b", re.IGNORECASE)
+    assert not loom_word.search(e["body_text"]), "Loom word leaked in plain text"
+    assert not loom_word.search(e["body_html"]), "Loom word leaked in HTML"
+    for needle in ["3-minute", "want me to send it"]:
+        assert needle not in e["body_text"], f"Loom-era phrase leaked: {needle!r}"
+        assert needle not in e["body_html"], f"Loom-era phrase leaked in HTML: {needle!r}"
+
     print("  [self-test] ALL TESTS PASSED")
 
 
@@ -1421,17 +1229,13 @@ def _self_test():
 # =============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="Unify Cold Email Agent v6 (Loom Pivot)")
+    parser = argparse.ArgumentParser(description="Unify Cold Email Agent v6.5 (consultation CTA)")
     parser.add_argument("--draft", action="store_true",
                         help="Draft Day-0 emails, priority-ordered")
     parser.add_argument("--redraft", action="store_true",
                         help="Clear queue + redraft everything")
     parser.add_argument("--follow-ups", action="store_true", dest="follow_ups",
                         help="Day 4/11/14 follow-up sweep")
-    parser.add_argument("--loom-script", action="store_true", dest="loom_script",
-                        help="Draft 3-bullet Loom scripts for loom_requested entries")
-    parser.add_argument("--loom-recorded", action="store_true", dest="loom_recorded",
-                        help="Draft follow-up emails for loom_recorded entries")
     parser.add_argument("--send", action="store_true",
                         help="Send approved emails via Resend")
     parser.add_argument("--mark-sent", type=str, dest="mark_sent",
@@ -1453,12 +1257,10 @@ def main():
         print(f"  mark_sent({args.mark_sent}): {'OK' if ok else 'FAILED'}")
         return
 
-    modes = [args.draft, args.redraft, args.follow_ups, args.loom_script,
-             args.loom_recorded, args.send]
+    modes = [args.draft, args.redraft, args.follow_ups, args.send]
     if not any(modes):
         print("Error: must specify --draft / --redraft / --follow-ups / "
-              "--loom-script / --loom-recorded / --send / --mark-sent / "
-              "--self-test")
+              "--send / --mark-sent / --self-test")
         parser.print_help()
         sys.exit(1)
 
@@ -1468,10 +1270,6 @@ def main():
         run_draft(max_drafts=args.max, dry_run=args.dry_run)
     elif args.follow_ups:
         run_follow_ups(max_per_day=args.max, dry_run=args.dry_run)
-    elif args.loom_script:
-        run_loom_scripts(dry_run=args.dry_run)
-    elif args.loom_recorded:
-        run_loom_recorded_followups(dry_run=args.dry_run)
     elif args.send:
         run_send(dry_run=args.dry_run)
 
