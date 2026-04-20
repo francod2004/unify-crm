@@ -514,6 +514,86 @@ def _to_em_dash(s: str) -> str:
     return s.replace(" -- ", " \u2014 ").replace("-- Franco", "\u2014 Franco")
 
 
+# =============================================================================
+# EMAIL SIGNATURE BLOCK (restored 2026-04-20)
+# -----------------------------------------------------------------------------
+# Previously added in commit 8403de8 (2026-04-14), removed during the v6 Loom
+# pivot (d731cfc) which switched to a bare "-- Franco" sign-off. Restored here
+# at Franco's request; the bare sign-off reads as draft notation in real
+# inbox delivery and hurts the prospect's first impression of the brand.
+#
+# Plain-text signature uses the RFC 3676 sig-dash (`--` on its own line) so
+# email clients collapse it correctly into a quoted-reply chain.
+#
+# HTML signature uses a table-based layout (most compatible across Gmail,
+# Outlook, Apple Mail). Brand colors come straight from the Unify brand kit:
+#   Primary blue:  #024AA5
+#   Dark navy:     #0A1E3D
+#   Body grey:     #555
+# =============================================================================
+
+UNIFY_LOGO_URL = (
+    "https://raw.githubusercontent.com/francod2004/unify-crm/main/assets/unify_logo.png"
+)
+
+
+def _signature_text() -> str:
+    """Plain-text email signature block. Prefix with two newlines when
+    concatenating onto an email body so the sig-dash has breathing room."""
+    return (
+        "--\n"
+        "Franco Di Giovanni\n"
+        "Founder | Unify AI Partners\n"
+        "(647) 210-3737\n"
+        "franco@unifyaipartners.ca\n"
+        "unifyaipartners.ca"
+    )
+
+
+def _signature_html() -> str:
+    """HTML email signature block (table-layout for client compatibility)."""
+    return (
+        '<table cellpadding="0" cellspacing="0" border="0" '
+        'style="margin-top:24px;border-top:2px solid #024AA5;'
+        'padding-top:16px;font-family:Arial,Helvetica,sans-serif;">'
+        "<tr>"
+        # Logo column
+        '<td style="vertical-align:top;padding-right:14px;">'
+        '<a href="https://unifyaipartners.ca" style="text-decoration:none;">'
+        f'<img src="{UNIFY_LOGO_URL}" alt="Unify AI Partners" '
+        'width="60" height="65" style="display:block;border:0;" />'
+        "</a>"
+        "</td>"
+        # Divider
+        '<td style="width:2px;background-color:#024AA5;'
+        'font-size:0;line-height:0;" width="2">&nbsp;</td>'
+        # Info column
+        '<td style="vertical-align:top;padding-left:14px;">'
+        '<table cellpadding="0" cellspacing="0" border="0">'
+        '<tr><td style="font-size:15px;font-weight:700;color:#0A1E3D;'
+        'padding-bottom:1px;font-family:Arial,Helvetica,sans-serif;">'
+        "Franco Di Giovanni</td></tr>"
+        '<tr><td style="font-size:11px;color:#024AA5;padding-bottom:8px;'
+        'font-family:Arial,Helvetica,sans-serif;letter-spacing:0.8px;'
+        'font-weight:600;">FOUNDER</td></tr>'
+        '<tr><td style="font-size:12px;color:#555;padding-bottom:3px;'
+        'font-family:Arial,Helvetica,sans-serif;">(647) 210-3737</td></tr>'
+        '<tr><td style="font-size:12px;padding-bottom:3px;'
+        'font-family:Arial,Helvetica,sans-serif;">'
+        '<a href="mailto:franco@unifyaipartners.ca" '
+        'style="color:#024AA5;text-decoration:none;">'
+        "franco@unifyaipartners.ca</a></td></tr>"
+        '<tr><td style="font-size:12px;font-family:Arial,Helvetica,sans-serif;">'
+        '<a href="https://unifyaipartners.ca" '
+        'style="color:#024AA5;text-decoration:none;font-weight:600;">'
+        "unifyaipartners.ca</a></td></tr>"
+        "</table>"
+        "</td>"
+        "</tr>"
+        "</table>"
+    )
+
+
 def _extract_first_name(owner: str) -> str:
     """Return first token of owner name, stripping titles like 'Dr.' etc."""
     if not owner:
@@ -645,25 +725,28 @@ def _build_email_body(prospect: dict, tier: int, hook: str):
         f"I'd build for {business_name} -- want me to send it?"
     )
 
-    signoff = "-- Franco"
-
-    # Plain text version -- em-dash conversion applied at the end so the
-    # source lines stay ASCII-safe for Windows cp1252 stdout.
-    text = _to_em_dash(
-        f"{greeting}\n\n"
-        f"{hook}\n\n"
-        f"{observation}\n\n"
-        f"{loom_offer}\n\n"
-        f"{signoff}\n"
+    # Plain text version -- em-dash conversion applied to the body only;
+    # signature block is stable ASCII (RFC 3676 sig-dash) + doesn't go through
+    # the converter because '--' on its own line has no surrounding spaces.
+    text = (
+        _to_em_dash(
+            f"{greeting}\n\n"
+            f"{hook}\n\n"
+            f"{observation}\n\n"
+            f"{loom_offer}\n\n"
+        )
+        + _signature_text()
     )
 
-    # HTML version (plain paragraphs, no signature block)
-    html = _to_em_dash(
-        f"<p>{greeting}</p>\n"
-        f"<p>{hook}</p>\n"
-        f"<p>{observation}</p>\n"
-        f"<p>{loom_offer}</p>\n"
-        f"<p>{signoff}</p>\n"
+    # HTML version: body paragraphs + table-based signature block.
+    html = (
+        _to_em_dash(
+            f"<p>{greeting}</p>\n"
+            f"<p>{hook}</p>\n"
+            f"<p>{observation}</p>\n"
+            f"<p>{loom_offer}</p>\n"
+        )
+        + _signature_html()
     )
 
     subject = f"Quick question about {business_name}"
@@ -730,10 +813,9 @@ def _build_day4_email(prospect: dict):
     greeting = f"Hi {first_name}," if first_name else "Hi there,"
 
     body = "Did my last note get buried? Happy to send that Loom over whenever works."
-    signoff = "-- Franco"
 
-    text = _to_em_dash(f"{greeting}\n\n{body}\n\n{signoff}\n")
-    html = _to_em_dash(f"<p>{greeting}</p>\n<p>{body}</p>\n<p>{signoff}</p>\n")
+    text = _to_em_dash(f"{greeting}\n\n{body}\n\n") + _signature_text()
+    html = _to_em_dash(f"<p>{greeting}</p>\n<p>{body}</p>\n") + _signature_html()
 
     return {
         "to_email": prospect.get("email"),
@@ -972,15 +1054,13 @@ def _build_loom_recorded_followup(prospect: dict, loom_link: str):
     body = f"Here's that Loom -- 3 minutes: {loom_link}"
     callout = ("If anything in it feels worth a deeper conversation, "
                "happy to jump on a quick call.")
-    signoff = "-- Franco"
 
-    text = _to_em_dash(f"{greeting}\n\n{body}\n\n{callout}\n\n{signoff}\n")
+    text = _to_em_dash(f"{greeting}\n\n{body}\n\n{callout}\n\n") + _signature_text()
     html = _to_em_dash(
         f"<p>{greeting}</p>\n"
         f"<p>{body}</p>\n"
         f"<p>{callout}</p>\n"
-        f"<p>{signoff}</p>\n"
-    )
+    ) + _signature_html()
 
     return {
         "to_email": prospect.get("email"),
@@ -1304,8 +1384,26 @@ def _self_test():
     e = generate_email(p)
     assert "\u2014" in e["body_text"], "rendered body should use em-dash"
     assert "\u2014" in e["body_html"]
-    # And sign-off should be em-dash too
-    assert e["body_text"].rstrip().endswith("\u2014 Franco")
+
+    print("  [self-test] signature block present (plain + HTML)")
+    # Plain-text signature: all 5 lines after the sig-dash
+    for needle in [
+        "\n--\n",                           # RFC 3676 sig-dash separator
+        "Franco Di Giovanni",
+        "Founder | Unify AI Partners",
+        "(647) 210-3737",
+        "franco@unifyaipartners.ca",
+        "unifyaipartners.ca",
+    ]:
+        assert needle in e["body_text"], f"plain signature missing {needle!r}"
+    # HTML signature: logo URL + mailto + primary brand color
+    for needle in [
+        "unify_logo.png",                   # logo image
+        "mailto:franco@unifyaipartners.ca", # mailto link
+        "#024AA5",                           # Unify primary blue
+        ">FOUNDER<",                         # role caps
+    ]:
+        assert needle in e["body_html"], f"html signature missing {needle!r}"
 
     print("  [self-test] fallback observation is diagnostic, not hedging")
     p = {"name":"Test","cat":"Dental & Medical","email":"x@y.com",
