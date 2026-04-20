@@ -9,6 +9,14 @@ on:
         description: 'Max prospects to enrich'
         required: false
         default: '100'
+      backfill:
+        description: 'Backfill mode: sweep prospects with empty email regardless of enriched_at'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   enrich:
@@ -34,4 +42,9 @@ jobs:
           FRANCO_PHONE: ${{ secrets.FRANCO_PHONE }}
           GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python enrichment_agent.py --max ${{ github.event.inputs.max || '100' }}
+        run: |
+          BACKFILL_FLAG=""
+          if [ "${{ github.event.inputs.backfill }}" = "true" ]; then
+            BACKFILL_FLAG="--backfill"
+          fi
+          python enrichment_agent.py --max ${{ github.event.inputs.max || '100' }} $BACKFILL_FLAG
