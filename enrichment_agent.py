@@ -349,14 +349,17 @@ def get_prospects_to_enrich(max_prospects=100, prospect_id=None, backfill=False)
     """
     Fetch prospects where enriched_at is NULL or older than 30 days.
     If prospect_id is provided, fetch only that row.
-    If backfill is True, pick prospects where email='' regardless of enriched_at.
+    If backfill is True, pick prospects where email IS NULL or email='',
+    regardless of enriched_at.
     """
     if prospect_id:
         url = f"{SUPABASE_URL}/rest/v1/prospects?id=eq.{quote(prospect_id)}"
     elif backfill:
+        # Match both empty string and true NULL in case any slip through.
+        # PostgREST OR-combinator: "email IS NULL OR email = ''"
         url = (
             f"{SUPABASE_URL}/rest/v1/prospects"
-            f"?email=eq."
+            f"?or=(email.is.null,email.eq.)"
             f"&order=created_at.asc"
             f"&limit={max_prospects}"
         )
