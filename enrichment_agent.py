@@ -174,10 +174,16 @@ def _is_dead_end_email(email):
 # =============================================================================
 
 PLACEHOLDER_EMAILS = {
+    # Wix / Squarespace / template defaults seen in the wild
     "example@mysite.com", "example@example.com",
-    "email@email.com", "test@test.com", "test@example.com",
+    "email@email.com", "email@website.com",
+    "test@test.com", "test@example.com",
     "admin@admin.com",
+    # "Your..." placeholder fields in contact-form templates
     "your@email.com", "your.email@email.com",
+    "contact@yoursite.com", "info@yoursite.com",
+    "contact@yourdomain.com", "hello@yourdomain.com",
+    # Generic form placeholders
     "user@domain.com", "name@domain.com", "name@example.com",
     "firstname@lastname.com", "first.last@company.com",
 }
@@ -190,8 +196,14 @@ PLACEHOLDER_DOMAINS = {
     "mysite.com",
 }
 
+# Local-part EXACT-match prefixes. Any email where `local == prefix` is
+# rejected regardless of domain. Keep this list short -- each entry can
+# false-positive on real addresses (e.g. "test@realbusiness.com" if we
+# scrape a site that publishes a testing inbox). The current set is
+# chosen because false-positive cost is low and template-catch value
+# is high.
 PLACEHOLDER_LOCAL_PREFIXES = {
-    "example", "your.email", "firstname.lastname",
+    "example", "your.email", "firstname.lastname", "test",
 }
 
 
